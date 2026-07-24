@@ -143,10 +143,11 @@ try {
     fail(`normalizeAgenticJob() salary wrong: ${JSON.stringify(job && job.salary)}`);
   }
 
-  if (normalizeAgenticJob({ title: 'X', companyName: 'Y', slug: 'bad slug!' }) === null) {
-    pass('normalizeAgenticJob() rejects a path-unsafe slug (feeds straight into a URL path)');
+  const unsafeSlugs = ['bad slug!', '../admin', 'a/b', 'x?y=1', 'x#frag'];
+  if (unsafeSlugs.every((slug) => normalizeAgenticJob({ title: 'X', companyName: 'Y', slug }) === null)) {
+    pass('normalizeAgenticJob() rejects path-unsafe / traversal / URL-injection slugs (feeds straight into a URL path)');
   } else {
-    fail('normalizeAgenticJob() should reject a path-unsafe slug');
+    fail(`normalizeAgenticJob() should reject every unsafe slug: ${JSON.stringify(unsafeSlugs.map((slug) => [slug, normalizeAgenticJob({ title: 'X', companyName: 'Y', slug })]))}`);
   }
   if (
     normalizeAgenticJob({ companyName: 'Y', slug: 'x' }) === null &&
@@ -215,10 +216,48 @@ try {
     fail(`agentic-jobs.fetch() dedup: expected 1 job, got ${dupeJobs.length}`);
   }
 
+  // Cross-page dedup: a job re-appearing on the next page (a live listing can
+  // shift rank between requests) must not be double-counted.
+  const crossPageDupe = mkCtx([
+    { data: [mkJob(1), mkJob(2)], meta: { total: 3, page: 1, per_page: 2 } },
+    { data: [mkJob(2), mkJob(3)], meta: { total: 3, page: 2, per_page: 2 } },
+  ]);
+  const crossPageJobs = await agentic.fetch({ name: 'X', provider: 'agentic-jobs' }, crossPageDupe.ctx);
+  if (crossPageJobs.length === 3 && new Set(crossPageJobs.map((j) => j.url)).size === 3) {
+    pass('agentic-jobs.fetch() dedups a job repeated across two different pages');
+  } else {
+    fail(`agentic-jobs.fetch() cross-page dedup: expected 3 unique jobs, got ${JSON.stringify(crossPageJobs.map((j) => j.url))}`);
+  }
+
+  // A malformed page (missing/non-array `data`) after already collecting real
+  // jobs must fail loudly, not silently truncate the run as if it were a
+  // legitimate short/last page.
+  const malformedMidPagination = mkCtx([
+    { data: [mkJob(1), mkJob(2)], meta: { total: 99, page: 1, per_page: 2 } },
+    { meta: { total: 99, page: 2, per_page: 2 } }, // "data" missing entirely
+  ]);
+  let malformedThrew = false;
+  try {
+    await agentic.fetch({ name: 'X', provider: 'agentic-jobs' }, malformedMidPagination.ctx);
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('unexpected API response shape on page 2')) malformedThrew = true;
+    else throw e;
+  }
+  if (malformedThrew) {
+    pass('agentic-jobs.fetch() throws on a malformed mid-pagination page instead of silently truncating');
+  } else {
+    fail('agentic-jobs.fetch() should throw when a later page has a missing/non-array "data" field');
+  }
+
   let zeroJobsThrew = false;
   try {
     await agentic.fetch({ name: 'X', provider: 'agentic-jobs' }, mkCtx([{ data: [], meta: { total: 0, page: 1, per_page: 50 } }]).ctx);
-  } catch { zeroJobsThrew = true; }
+  } catch (e) {
+    // Match the specific canary message — an unrelated error (e.g. a bug
+    // elsewhere) must not make this assertion pass by accident.
+    if (e instanceof Error && e.message.includes('parsed 0 jobs from the API')) zeroJobsThrew = true;
+    else throw e;
+  }
   if (zeroJobsThrew) {
     pass('agentic-jobs.fetch() throws when the API yields zero jobs (response-shape-change canary)');
   } else {

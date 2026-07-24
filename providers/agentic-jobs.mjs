@@ -164,8 +164,17 @@ export default {
       if (page > 1) await wait(PAGE_DELAY_MS);
       const url = assertAgenticUrl(`${API_BASE}/jobs?page=${page}`);
       const json = await ctx.fetchJson(url, { redirect: 'error', headers: { accept: 'application/json' } });
-      const records = Array.isArray(json?.data) ? json.data : [];
-      if (total === null) total = typeof json?.meta?.total === 'number' ? json.meta.total : null;
+      // A missing/non-array `data` is a response-shape change, not a legitimate
+      // empty page (the API returns `data: []` for that) — fail loudly instead
+      // of silently truncating whatever pages were already collected.
+      if (!json || !Array.isArray(json.data)) {
+        throw new Error(`agentic-jobs: unexpected API response shape on page ${page} — "data" is missing or not an array`);
+      }
+      const records = json.data;
+      if (total === null) total = typeof json.meta?.total === 'number' ? json.meta.total : null;
+      // Trust the API's own reported page size over our constant, in case it
+      // ever differs from the documented default.
+      const effectivePageSize = typeof json.meta?.per_page === 'number' && json.meta.per_page > 0 ? json.meta.per_page : PAGE_SIZE;
 
       for (const record of records) {
         const job = normalizeAgenticJob(record);
@@ -176,8 +185,8 @@ export default {
       }
 
       if (jobs.length >= MAX_JOBS) break;
-      if (records.length < PAGE_SIZE) break; // short page — last one
-      if (total !== null && page * PAGE_SIZE >= total) break;
+      if (records.length < effectivePageSize) break; // short page — last one
+      if (total !== null && page * effectivePageSize >= total) break;
     }
 
     if (jobs.length === 0) {
