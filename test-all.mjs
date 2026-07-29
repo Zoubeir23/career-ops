@@ -12431,25 +12431,37 @@ try {
   }
 
   const summary = /** @type {any} */ (publisher ? publisher[1] : null);
-
-  // Gating on the matrix is what makes the context meaningful: without `needs`
-  // it would go green while the suite burns.
-  const needs = [summary?.needs].flat().filter(Boolean);
   const matrixJobIds = Object.keys(jobs).filter((id) => /** @type {any} */ (jobs[id])?.strategy?.matrix);
-  if (matrixJobIds.length > 0 && matrixJobIds.every((id) => needs.includes(id))) {
-    pass(`the "test" context waits on every matrixed job (${matrixJobIds.join(', ')})`);
-  } else {
-    fail(`the "test" context does not depend on the matrixed job(s) [${matrixJobIds.join(', ')}] — it would report green while the matrix fails`);
-  }
 
-  // Without always() a failed matrix SKIPS the summary, and a skipped required
-  // check never reports — the same indefinite stall, on the PRs that should be
-  // blocked. With it, the result must be asserted or the job is green regardless.
-  const assertsResult = JSON.stringify(summary?.steps || []).includes('needs.test.result');
-  if (String(summary?.if || '').includes('always()') && assertsResult) {
-    pass('the "test" context runs on always() AND asserts the matrix result (fails closed)');
+  // The invariant is "a job publishes `test` and it is red when the suite is
+  // red", NOT "the suite is matrixed". Un-matrixing is a legitimate revert of
+  // #1762 in which the publisher IS the suite job — asserting the aggregation
+  // wiring there would fail a perfectly satisfied merge gate, and a guard that
+  // cries wolf on a valid workflow gets deleted rather than understood.
+  if (matrixJobIds.length === 0) {
+    pass('the suite is not matrixed — the "test" job publishes the required context directly, nothing to aggregate');
   } else {
-    fail('the "test" context is missing always() or the matrix-result assertion — a failed matrix would skip it (#2261)');
+    // Gating on the matrix is what makes the context meaningful: without
+    // `needs` it would go green while the suite burns.
+    const needs = [summary?.needs].flat().filter(Boolean);
+    if (matrixJobIds.every((id) => needs.includes(id))) {
+      pass(`the "test" context waits on every matrixed job (${matrixJobIds.join(', ')})`);
+    } else {
+      fail(`the "test" context does not depend on the matrixed job(s) [${matrixJobIds.join(', ')}] — it would report green while the matrix fails`);
+    }
+
+    // Without always() a failed matrix SKIPS the summary, and a skipped
+    // required check never reports — the same indefinite stall, on the PRs
+    // that should be blocked. With it, the result must be asserted or the job
+    // is green regardless. The expected expressions are derived from the
+    // matrix job ids, so renaming those jobs consistently does not trip this.
+    const steps = JSON.stringify(summary?.steps || []);
+    const assertsResult = matrixJobIds.every((id) => steps.includes(`needs.${id}.result`));
+    if (String(summary?.if || '').includes('always()') && assertsResult) {
+      pass('the "test" context runs on always() AND asserts every matrix result (fails closed)');
+    } else {
+      fail(`the "test" context is missing always() or an assertion on ${matrixJobIds.map((id) => `needs.${id}.result`).join(' / ')} — a failed matrix would skip it (#2261)`);
+    }
   }
 } catch (e) {
   fail(`required 'test' status context check crashed: ${e.message}`);
