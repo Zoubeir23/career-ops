@@ -40,3 +40,29 @@ jobs:
       - name: Go dashboard tests
         run: go test ./...
         working-directory: dashboard
+
+  # Branch protection requires a status context named exactly `test`. Since the
+  # suite was matrixed (#1762) the legs report as `test (ubuntu-latest)` /
+  # `(macos-latest)` / `(windows-latest)` and nothing publishes a bare `test`,
+  # so the required context sat at "Expected — waiting for status to be
+  # reported" on every PR forever, 3/3 green included (#2261).
+  #
+  # This job republishes that one name. Two things keep it honest and must not
+  # be dropped:
+  #   - `name: test` IS the required context. Renaming the job is harmless;
+  #     renaming this is what re-breaks the merge gate.
+  #   - `if: always()` — without it a failed matrix skips this job, and a
+  #     skipped required check never reports, which reopens the same stall on
+  #     exactly the PRs that should be blocked.
+  test-summary:
+    name: test
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      # `needs.test.result` is the matrix roll-up: success only when every leg
+      # succeeded, so this is red on failure, cancellation, or a skipped matrix.
+      - name: Assert every matrix leg passed
+        run: |
+          echo "Tests matrix result: ${{ needs.test.result }}"
+          [ "${{ needs.test.result }}" = "success" ] || exit 1
