@@ -50,8 +50,11 @@ function resolveMaxPages(entry) {
  *               host (NOT echojobs.io), used as the dedup key. Non-https/malformed
  *               URLs drop the item.
  *   - company:  `company_name`, falling back to the portal entry name, then "EchoJobs".
- *   - location: the joined `locations` array; falls back to "Remote" when the
- *               posting has no listed place but `remote_type` is remote/hybrid.
+ *   - location: the joined `locations` array; falls back to "Remote" for a
+ *               placeless remote posting, "Hybrid" for a placeless hybrid one
+ *               (kept distinguishable so a `location_filter.block: ["Hybrid"]`
+ *               rule — or a user's own — can still act on it; collapsing both
+ *               to "Remote" would make that block unmatchable, #2258).
  *   - postedAt: `posted_at` (already epoch ms) when a positive finite number.
  *
  * @param {any} j
@@ -90,7 +93,10 @@ export function normalizeEchojobsJob(j, fallbackCompany) {
       .map((l) => l.trim())
       .join(', ');
   }
-  if (!location && (j.remote_type === 'remote' || j.remote_type === 'hybrid')) location = 'Remote';
+  if (!location) {
+    if (j.remote_type === 'remote') location = 'Remote';
+    else if (j.remote_type === 'hybrid') location = 'Hybrid';
+  }
 
   /** @type {{ title: string, url: string, company: string, location: string, postedAt?: number }} */
   const job = { title, url, company, location };

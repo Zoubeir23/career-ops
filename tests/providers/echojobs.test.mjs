@@ -39,13 +39,24 @@ try {
     fail(`normalizeEchojobsJob => ${JSON.stringify(n)}`);
   }
 
-  // remote fallback when no listed place
+  // remote/hybrid fallback when no listed place — kept distinguishable (#2258)
+  // so a location_filter.block: ["Hybrid"] rule can still catch a hybrid role;
+  // collapsing both to "Remote" would make that block unmatchable.
   const remote = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/1', locations: [], remote_type: 'remote' });
   const hybrid = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/2', remote_type: 'hybrid' });
-  if (remote?.location === 'Remote' && hybrid?.location === 'Remote') {
-    pass('normalizeEchojobsJob falls back to "Remote" for a placeless remote OR hybrid role');
+  if (remote?.location === 'Remote' && hybrid?.location === 'Hybrid') {
+    pass('normalizeEchojobsJob falls back to "Remote" for a placeless remote role, "Hybrid" for a placeless hybrid one (#2258)');
   } else {
     fail(`remote/hybrid fallback => ${JSON.stringify([remote?.location, hybrid?.location])}`);
+  }
+
+  // on_site with no listed place gets no location fallback at all — only
+  // remote/hybrid roles are placeless-tolerant.
+  const onSiteNoPlace = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/3', remote_type: 'on_site' });
+  if (onSiteNoPlace?.location === '') {
+    pass('normalizeEchojobsJob leaves location empty for a placeless on_site role (no false Remote/Hybrid)');
+  } else {
+    fail(`on_site placeless fallback => ${JSON.stringify(onSiteNoPlace?.location)}`);
   }
 
   // company fallback to the entry name
