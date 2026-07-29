@@ -51,9 +51,11 @@ jobs:
   # be dropped:
   #   - `name: test` IS the required context. Renaming the job is harmless;
   #     renaming this is what re-breaks the merge gate.
-  #   - `if: always()` — without it a failed matrix skips this job, and a
-  #     skipped required check never reports, which reopens the same stall on
-  #     exactly the PRs that should be blocked.
+  #   - `if: always()` — without it a failed matrix skips this job, and GitHub
+  #     reports a skipped required check as SUCCESSFUL. The merge gate would
+  #     then be bypassed on exactly the PRs that should be blocked: worse than
+  #     the stall above, because a green check hides it. It must stay a bare
+  #     `always()`; `always() && <cond>` can skip again.
   test-summary:
     name: test
     needs: test
