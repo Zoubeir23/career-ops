@@ -54,11 +54,22 @@ const HYBRID_MARKER = /\bhybrid\b/i;
  *               host (NOT echojobs.io), used as the dedup key. Non-https/malformed
  *               URLs drop the item.
  *   - company:  `company_name`, falling back to the portal entry name, then "EchoJobs".
- *   - location: the joined `locations` array; falls back to "Remote" for a
- *               placeless remote posting, "Hybrid" for a placeless hybrid one
- *               (kept distinguishable so a `location_filter.block: ["Hybrid"]`
- *               rule — or a user's own — can still act on it; collapsing both
- *               to "Remote" would make that block unmatchable, #2258).
+ *   - location: the joined `locations` array, with " · Hybrid" appended when
+ *               `remote_type` is hybrid ("Berlin · Hybrid"), and falling back
+ *               to a bare "Hybrid" / "Remote" when the posting lists no place
+ *               at all. Hybrid is never collapsed into "Remote": the emitted
+ *               string is what `location_filter` matches on, so collapsing it
+ *               would make a `block: ["Hybrid"]` rule unmatchable and let
+ *               hybrid roles pass a remote-only filter (#2258). A placeless
+ *               on_site posting keeps "" — only remote/hybrid are
+ *               placeless-tolerant, and "" passes the filter under the
+ *               scanner's "don't penalize missing data" convention.
+ *
+ *               Note this diverges from greenhouse.mjs, which treats a
+ *               work-model-only location as damage to repair via /offices
+ *               enrichment. That provider can recover a real city; this feed
+ *               exposes none, so the work model is the only signal there is
+ *               and is better surfaced than dropped.
  *   - postedAt: `posted_at` (already epoch ms) when a positive finite number.
  *
  * @param {any} j
