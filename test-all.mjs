@@ -12409,6 +12409,52 @@ try {
   fail(`table-freshness wiring check: ${e.message}`);
 }
 
+// ── 70. CI — the required 'test' status context is published (#2261) ──
+console.log("\n70. CI — required 'test' status context (#2261)");
+
+try {
+  const { load } = await import('js-yaml');
+  const workflow = /** @type {any} */ (load(readFile('.github/workflows/test.yml')));
+  const jobs = workflow?.jobs || {};
+
+  // Branch protection requires a context named exactly `test`. A matrixed job
+  // reports `test (<os>)` and never that bare name, so SOME job must publish
+  // it — otherwise every PR stalls at "Expected, waiting for status to be
+  // reported" even when the whole matrix is green (#2261, regression of #1762).
+  const publisher = Object.entries(jobs).find(
+    ([id, job]) => (/** @type {any} */ (job)?.name || id) === 'test' && !(/** @type {any} */ (job)?.strategy?.matrix),
+  );
+  if (publisher) {
+    pass(`a non-matrixed job publishes the required "test" context (jobs.${publisher[0]})`);
+  } else {
+    fail('no job reports a bare "test" check — branch protection can never be satisfied (#2261)');
+  }
+
+  const summary = /** @type {any} */ (publisher ? publisher[1] : null);
+
+  // Gating on the matrix is what makes the context meaningful: without `needs`
+  // it would go green while the suite burns.
+  const needs = [summary?.needs].flat().filter(Boolean);
+  const matrixJobIds = Object.keys(jobs).filter((id) => /** @type {any} */ (jobs[id])?.strategy?.matrix);
+  if (matrixJobIds.length > 0 && matrixJobIds.every((id) => needs.includes(id))) {
+    pass(`the "test" context waits on every matrixed job (${matrixJobIds.join(', ')})`);
+  } else {
+    fail(`the "test" context does not depend on the matrixed job(s) [${matrixJobIds.join(', ')}] — it would report green while the matrix fails`);
+  }
+
+  // Without always() a failed matrix SKIPS the summary, and a skipped required
+  // check never reports — the same indefinite stall, on the PRs that should be
+  // blocked. With it, the result must be asserted or the job is green regardless.
+  const assertsResult = JSON.stringify(summary?.steps || []).includes('needs.test.result');
+  if (String(summary?.if || '').includes('always()') && assertsResult) {
+    pass('the "test" context runs on always() AND asserts the matrix result (fails closed)');
+  } else {
+    fail('the "test" context is missing always() or the matrix-result assertion — a failed matrix would skip it (#2261)');
+  }
+} catch (e) {
+  fail(`required 'test' status context check crashed: ${e.message}`);
+}
+
 await runDiscovered();
 
 finish();
