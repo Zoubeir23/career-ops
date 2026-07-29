@@ -12450,17 +12450,36 @@ try {
       fail(`the "test" context does not depend on the matrixed job(s) [${matrixJobIds.join(', ')}] — it would report green while the matrix fails`);
     }
 
-    // Without always() a failed matrix SKIPS the summary, and a skipped
-    // required check never reports — the same indefinite stall, on the PRs
-    // that should be blocked. With it, the result must be asserted or the job
-    // is green regardless. The expected expressions are derived from the
-    // matrix job ids, so renaming those jobs consistently does not trip this.
-    const steps = JSON.stringify(summary?.steps || []);
-    const assertsResult = matrixJobIds.every((id) => steps.includes(`needs.${id}.result`));
-    if (String(summary?.if || '').includes('always()') && assertsResult) {
-      pass('the "test" context runs on always() AND asserts every matrix result (fails closed)');
+    // Without always() a failed matrix SKIPS the summary — and GitHub reports
+    // a skipped required check as SUCCESSFUL, so the merge gate is bypassed on
+    // exactly the PRs that should be blocked. That is worse than the #2261
+    // stall this job fixes: the stall is at least visible.
+    //
+    // `always()` must therefore be the WHOLE condition: `always() && <cond>`
+    // can still skip. And it only buys a job that runs — the run must also
+    // fail on a red matrix, or the context is green regardless.
+    if (String(summary?.if ?? '').trim() === 'always()') {
+      pass('the "test" context runs unconditionally (if: always(), not always() && …)');
     } else {
-      fail(`the "test" context is missing always() or an assertion on ${matrixJobIds.map((id) => `needs.${id}.result`).join(' / ')} — a failed matrix would skip it (#2261)`);
+      fail(`the "test" context has if: ${JSON.stringify(summary?.if ?? null)} — anything but a bare always() can skip, and a skipped required check reports as SUCCESS (#2261)`);
+    }
+
+    // A step asserts a leg when it (a) binds that leg's result, in env or
+    // inline, (b) compares it to success, and (c) exits non-zero otherwise.
+    // Merely mentioning the expression is not an assertion. The expected
+    // expressions are derived from the matrix job ids, so renaming those jobs
+    // consistently does not trip this.
+    const assertsLeg = (/** @type {any} */ step, /** @type {string} */ id) => {
+      const script = String(step?.run || '');
+      const binds = script.includes(`needs.${id}.result`) || JSON.stringify(step?.env || {}).includes(`needs.${id}.result`);
+      return binds && /=+\s*"?success"?/.test(script) && /exit\s+[1-9]/.test(script);
+    };
+    const steps = Array.isArray(summary?.steps) ? summary.steps : [];
+    const unasserted = matrixJobIds.filter((id) => !steps.some((/** @type {any} */ step) => assertsLeg(step, id)));
+    if (unasserted.length === 0) {
+      pass('the "test" context fails closed: every matrix result is compared to success with a non-zero exit');
+    } else {
+      fail(`the "test" context never asserts ${unasserted.map((id) => `needs.${id}.result`).join(' / ')} against success with a non-zero exit — a red matrix would report green (#2261)`);
     }
   }
 } catch (e) {
