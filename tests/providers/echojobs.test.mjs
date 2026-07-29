@@ -59,6 +59,40 @@ try {
     fail(`on_site placeless fallback => ${JSON.stringify(onSiteNoPlace?.location)}`);
   }
 
+  // a hybrid role that DOES list a city keeps the city and gains the marker,
+  // so block: ["Hybrid"] is not half-working (#2258).
+  const hybridWithCity = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/4', locations: ['Berlin'], remote_type: 'hybrid' });
+  if (hybridWithCity?.location === 'Berlin · Hybrid') {
+    pass('normalizeEchojobsJob appends the Hybrid marker to a hybrid role that lists a city (#2258)');
+  } else {
+    fail(`hybrid with city => ${JSON.stringify(hybridWithCity?.location)}`);
+  }
+
+  // the marker is never doubled when the board already spells it out
+  const hybridSpelledOut = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/5', locations: ['Berlin (Hybrid)'], remote_type: 'hybrid' });
+  if (hybridSpelledOut?.location === 'Berlin (Hybrid)') {
+    pass('normalizeEchojobsJob does not double the marker when the location already says Hybrid');
+  } else {
+    fail(`hybrid already spelled out => ${JSON.stringify(hybridSpelledOut?.location)}`);
+  }
+
+  // a placed remote role is left alone — only hybrid gets a marker appended
+  const remoteWithCity = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/6', locations: ['Berlin'], remote_type: 'remote' });
+  if (remoteWithCity?.location === 'Berlin') {
+    pass('normalizeEchojobsJob leaves a placed remote role untouched (no marker beyond the #2258 scope)');
+  } else {
+    fail(`remote with city => ${JSON.stringify(remoteWithCity?.location)}`);
+  }
+
+  // remote_type is a third-party field: casing/whitespace must not smuggle an
+  // unmarked hybrid through.
+  const hybridOddCasing = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/7', locations: ['Berlin'], remote_type: ' Hybrid ' });
+  if (hybridOddCasing?.location === 'Berlin · Hybrid') {
+    pass('normalizeEchojobsJob matches remote_type case/whitespace-insensitively');
+  } else {
+    fail(`hybrid odd casing => ${JSON.stringify(hybridOddCasing?.location)}`);
+  }
+
   // company fallback to the entry name
   const bare = normalizeEchojobsJob({ title: 'X', url: 'https://jobs.lever.co/x/1' }, 'EntryName');
   if (bare?.company === 'EntryName') pass('normalizeEchojobsJob falls back to the entry name for company');
