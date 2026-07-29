@@ -63,6 +63,12 @@ jobs:
       # `needs.test.result` is the matrix roll-up: success only when every leg
       # succeeded, so this is red on failure, cancellation, or a skipped matrix.
       - name: Assert every matrix leg passed
+        # The result is read through env rather than interpolated into the
+        # script. It is a GitHub-controlled enum here, so nothing is
+        # exploitable — but `${{ }}` inside `run:` is the shape that becomes an
+        # injection the day someone copies this step for a value that isn't.
+        env:
+          MATRIX_RESULT: ${{ needs.test.result }}
         run: |
-          echo "Tests matrix result: ${{ needs.test.result }}"
-          [ "${{ needs.test.result }}" = "success" ] || exit 1
+          echo "Tests matrix result: $MATRIX_RESULT"
+          [ "$MATRIX_RESULT" = "success" ] || exit 1
