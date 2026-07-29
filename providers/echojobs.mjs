@@ -93,9 +93,13 @@ export function normalizeEchojobsJob(j, fallbackCompany) {
       .map((l) => l.trim())
       .join(', ');
   }
+  // The feed is a third-party aggregate, so `remote_type` is compared
+  // case/whitespace-insensitively: a "Hybrid" variant must not fall through
+  // silently and become an unmarked, unfilterable role.
+  const remoteType = typeof j.remote_type === 'string' ? j.remote_type.trim().toLowerCase() : '';
   if (!location) {
-    if (j.remote_type === 'remote') location = 'Remote';
-    else if (j.remote_type === 'hybrid') location = 'Hybrid';
+    if (remoteType === 'remote') location = 'Remote';
+    else if (remoteType === 'hybrid') location = 'Hybrid';
   }
 
   /** @type {{ title: string, url: string, company: string, location: string, postedAt?: number }} */
