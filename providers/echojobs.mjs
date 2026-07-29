@@ -41,6 +41,10 @@ function resolveMaxPages(entry) {
   return DEFAULT_MAX_PAGES;
 }
 
+// Guards against a doubled marker when the board already spells the work model
+// into the location itself ("Berlin (Hybrid)", "Hybrid - London").
+const HYBRID_MARKER = /\bhybrid\b/i;
+
 /**
  * Normalize a single EchoJobs feed item. Exported for tests.
  *
@@ -97,9 +101,15 @@ export function normalizeEchojobsJob(j, fallbackCompany) {
   // case/whitespace-insensitively: a "Hybrid" variant must not fall through
   // silently and become an unmarked, unfilterable role.
   const remoteType = typeof j.remote_type === 'string' ? j.remote_type.trim().toLowerCase() : '';
-  if (!location) {
-    if (remoteType === 'remote') location = 'Remote';
-    else if (remoteType === 'hybrid') location = 'Hybrid';
+  if (remoteType === 'hybrid') {
+    // A hybrid role keeps its city AND gains the marker ("Berlin · Hybrid"),
+    // same shape as oraclecloud's WorkplaceTypeCode hint. Marking only the
+    // placeless ones would leave `block: ["Hybrid"]` half-working: it would
+    // catch the placeless roles and silently pass every hybrid that happens
+    // to list a city (#2258).
+    if (!HYBRID_MARKER.test(location)) location = [location, 'Hybrid'].filter(Boolean).join(' · ');
+  } else if (!location && remoteType === 'remote') {
+    location = 'Remote';
   }
 
   /** @type {{ title: string, url: string, company: string, location: string, postedAt?: number }} */
