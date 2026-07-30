@@ -12464,15 +12464,36 @@ try {
       fail(`the "test" context has if: ${JSON.stringify(summary?.if ?? null)} — anything but a bare always() can skip, and a skipped required check reports as SUCCESS (#2261)`);
     }
 
-    // A step asserts a leg when it (a) binds that leg's result, in env or
-    // inline, (b) compares it to success, and (c) exits non-zero otherwise.
-    // Merely mentioning the expression is not an assertion. The expected
-    // expressions are derived from the matrix job ids, so renaming those jobs
-    // consistently does not trip this.
+    // A step asserts a leg only when the comparison is tied to THAT leg's
+    // result. Checking that the expression, a `success` comparison and an
+    // `exit` each appear somewhere in the step is not enough: they can belong
+    // to unrelated commands, and a step carrying its own `if:` may never run
+    // at all. The expected expressions are derived from the matrix job ids, so
+    // renaming those jobs consistently does not trip this.
     const assertsLeg = (/** @type {any} */ step, /** @type {string} */ id) => {
+      // A conditional step is not a guarantee — `if: false` asserts nothing.
+      const stepIf = String(step?.if ?? '').trim();
+      if (stepIf !== '' && stepIf !== 'always()' && stepIf !== 'true') return false;
+
+      // The shell tokens that actually carry this leg's result: the inline
+      // expression, plus any env var bound to it.
+      const expression = `needs.${id}.result`;
       const script = String(step?.run || '');
-      const binds = script.includes(`needs.${id}.result`) || JSON.stringify(step?.env || {}).includes(`needs.${id}.result`);
-      return binds && /=+\s*"?success"?/.test(script) && /exit\s+[1-9]/.test(script);
+      const tokens = script.includes(expression) ? [expression] : [];
+      for (const [key, value] of Object.entries(step?.env || {})) {
+        if (String(value).includes(expression)) tokens.push(`$${key}`, `\${${key}}`);
+      }
+      if (tokens.length === 0) return false;
+
+      // The comparison must sit in the same command as the token, and the
+      // non-zero exit within reach of it — covering both `[ … ] || exit 1` and
+      // the `if [ … ]; then exit 1; fi` spelling, but not an `exit` that
+      // belongs to some other command further down the script.
+      const lines = script.split('\n');
+      return lines.some((line, i) => {
+        if (!tokens.some((token) => line.includes(token)) || !line.includes('success')) return false;
+        return lines.slice(i, i + 4).some((l) => /exit\s+[1-9]/.test(l));
+      });
     };
     const steps = Array.isArray(summary?.steps) ? summary.steps : [];
     const unasserted = matrixJobIds.filter((id) => !steps.some((/** @type {any} */ step) => assertsLeg(step, id)));
