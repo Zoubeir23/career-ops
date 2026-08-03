@@ -164,6 +164,9 @@ try {
     ['techcrunch', 'Zeta raises $18M Series A after job cuts'],
     ['prnewswire', 'Eta Corp raises $30M and sheds 90 roles'],
     ['guardian', 'Theta raises $12M seed amid a workforce reduction'],
+    // Plural: the singular-only form let this straight through (CodeRabbit).
+    ['guardian', 'Iota raises $12M seed amid workforce reductions'],
+    ['techcrunch', 'Mu Corp raises $20M then cuts 25% of the workforce'],
   ].map(([source, title], idx) => ({
     source,
     title,
@@ -183,8 +186,13 @@ try {
   // cloud spend while raising is a normal funding lead, and excluding it would
   // trade one false positive for a lost opportunity.
   const costCutting = [
-    ['techcrunch', 'Iota raises $40M Series A and cuts 1,200 tonnes of CO2'],
+    ['techcrunch', 'Nu raises $40M Series A and cuts 1,200 tonnes of CO2'],
     ['techcrunch', 'Kappa raises $25M Seed to hire 50 engineers'],
+    // The percent form is scoped to workforce nouns too, so a percentage
+    // reduction of something else is still a lead. Before this PR the
+    // percent alternative had no such requirement and dropped both.
+    ['techcrunch', 'Xi raises $40M Series A, cuts 30% of cloud costs'],
+    ['techcrunch', 'Omicron raises $40M Series A and cuts 30 % of CO2 emissions'],
   ].map(([source, title], idx) => ({
     source,
     title,
@@ -194,8 +202,8 @@ try {
     categories: [],
   }));
   const costCuttingCandidates = mod.buildCandidates(costCutting, { now: new Date('2026-07-20T00:00:00Z'), months: 3, limit: 10 });
-  if (costCuttingCandidates.length === 2) {
-    pass('a count with no workforce noun is still a funding lead — the exclusion is not a blanket "cuts" ban');
+  if (costCuttingCandidates.length === 4) {
+    pass('a reduction of something other than staff is still a funding lead, count or percent — the exclusion is not a blanket "cuts" ban');
   } else {
     fail(`cost-cutting/hiring headlines were dropped: kept ${JSON.stringify(costCuttingCandidates.map((c) => c.company))}`);
   }
