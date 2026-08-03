@@ -50,6 +50,20 @@ test("prose is not eaten: both reads need a real delimiter", () => {
   assert.equal(authorLetter("Risk Summary"), null);
 });
 
+test("the spelled-out Block form is stripped for display too", () => {
+  // authorLetter reads "Block A — Role Summary" as section A, so cleanHeading
+  // must not leave "Block A —" in the rendered heading: classifying a heading
+  // one way and displaying it another is the same inconsistency #2324 is about.
+  assert.equal(cleanHeading("Block A — Role Summary"), "Role Summary");
+  assert.equal(cleanHeading("Block A – Role Summary"), "Role Summary");
+  assert.equal(cleanHeading("Block A - Role Summary"), "Role Summary");
+  assert.equal(cleanHeading("Block A Role Summary"), "Role Summary");
+  assert.equal(cleanHeading("Block C) Red Flags"), "Red Flags");
+  // The word Block is what licenses the whitespace form. A bare letter still
+  // needs a delimiter, or prose loses its first word.
+  assert.equal(cleanHeading("A Recommendation Was Requested"), "A Recommendation Was Requested");
+});
+
 test("the spelled-out Block form keeps its letter without a delimiter", () => {
   // oferta.md:47 writes "## Block A — Role Summary": nothing follows the letter
   // but a space. Losing the letter here would drop the F verdict callout and

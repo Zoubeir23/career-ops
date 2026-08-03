@@ -16,8 +16,18 @@
  * block added past H is handled the day the core writes it.
  */
 
-/** Strips the prefix for display: needs a real delimiter, never a bare space. */
-const HEADING_PREFIX = /^\s*(?:Block\s+)?([A-Z])[).:]\s*/i;
+/**
+ * Strips the prefix for display. A BARE letter needs a real delimiter, never a
+ * bare space, or ordinary prose loses its first word ("A Recommendation Was
+ * Requested" → "Recommendation Was Requested").
+ *
+ * After `Block` the whitespace form is allowed, because the word itself is the
+ * disambiguator: "## Block A — Role Summary" (oferta.md:47) is unmistakably a
+ * lettered heading. HEADING_LETTER below already reads that grammar as section
+ * A, so leaving the prefix in the rendered heading made this file classify a
+ * heading one way and display it another (CodeRabbit review).
+ */
+const HEADING_PREFIX = /^\s*(?:Block\s+([A-Z])(?:[).:]\s*|\s+(?:[—–-]\s*)?)|([A-Z])[).:]\s*)/i;
 
 /**
  * Reads the letter. A bare letter needs a delimiter, exactly like the display
