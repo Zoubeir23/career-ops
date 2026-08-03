@@ -37,8 +37,27 @@ const METRIC_NOUNS = [
   'servers', 'guides', 'articles', 'datasets', 'examples', 'deployments',
   'services', 'downloads', 'stars', 'lines', 'projects', 'integrations', 'tests',
 ];
+// How many words may sit between a number and the noun it counts. The same
+// regex parses the generated CV and the sources, so the window is symmetric by
+// construction — but a window still decides WHETHER a claim exists, and the CV
+// and its source rarely word a fact identically. At {0,2}, "~5 live Cloud Run
+// deployments" (three modifiers) yielded no claim while the paraphrase
+// "~5 Cloud Run deployments" (two) did, which broke the gate in both
+// directions (#2279):
+//
+//   - a truthful CV failed, because the claim existed on the CV side only;
+//   - a CHANGED number passed, because a 3-modifier phrasing on the CV side
+//     produced no claim to compare — and catching invented numbers is the
+//     entire point of this script.
+//
+// Four covers the phrasings seen in real CVs ("live Cloud Run deployments",
+// "active monthly paying customers"). Widening cannot hide an invented number:
+// it only ever extracts MORE claims, on both sides. A number is a hard barrier
+// for the chain — modifiers are alphabetic only — so a wider window still
+// cannot jump across an intervening figure to bind an unrelated noun.
+const MODIFIER_WINDOW = 4;
 const COUNT_CLAIM_RE = new RegExp(
-  String.raw`\b(\d[\d,.]*)\s*\+?\s*(?:[A-Za-z][A-Za-z-]*\s+){0,2}(${METRIC_NOUNS.join('|')})\b`,
+  String.raw`\b(\d[\d,.]*)\s*\+?\s*(?:[A-Za-z][A-Za-z-]*\s+){0,${MODIFIER_WINDOW}}(${METRIC_NOUNS.join('|')})\b`,
   'gi'
 );
 const NOUN_SYNONYMS = new Map([
