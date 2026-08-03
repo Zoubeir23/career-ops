@@ -403,6 +403,11 @@ function runSelfTest() {
   equal('space-grouped thousands compare equal', auditClaims('Reached 16 181 users', foldSource).invented, []);
   equal('ungrouped compares equal to a grouped source', auditClaims('Reached 16181 users', foldSource).invented, []);
   equal('a fabricated space-grouped number is still caught', auditClaims('Reached 94 772 users', foldSource).invented, ['94772 users']);
+  // Multi-group values fold in full: `.replace(/…/g)` evaluates each separator
+  // against the ORIGINAL string, where every group is preceded by a space, not
+  // a digit, so the lookbehind passes at each one (CodeRabbit asked).
+  equal('a multi-group number folds completely', auditClaims('Reached 1 234 567 users', 'Reached 1234567 active users.').invented, []);
+  equal('an eight-digit multi-group number folds too', auditClaims('Reached 12 345 678 users', 'Reached 12345678 active users.').invented, []);
   // A four-digit left part is a year, not a group: nothing is joined.
   equal('a year is not glued to the next number', auditClaims('Joined in 2026 100 users', foldSource).invented, ['100 users']);
 
