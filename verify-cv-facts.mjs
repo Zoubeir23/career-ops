@@ -458,10 +458,16 @@ function runSelfTest() {
     ['9 deployments']
   );
   // A wider window must not let the chain jump over an intervening figure to
-  // bind a number to a noun it does not count.
+  // bind a number to a noun it does not count. The source states the two facts
+  // in SEPARATE sentences on purpose: with identical text on both sides, a
+  // wrong "7 hours" extraction would appear on both and cancel itself out, so
+  // the assertion would pass while proving nothing. Both nouns are metric
+  // nouns, so each real claim is independently evidenced and the only thing
+  // that can surface as invented is a cross-number binding.
+  const numericBarrierSource = 'Ran 7 tests. Logged 40 hours.';
   equal(
     'a figure still blocks the chain',
-    auditClaims('Ran 7 experiments over 40 hours', 'Ran 7 experiments over 40 hours').invented,
+    auditClaims('Ran 7 tests over 40 hours', numericBarrierSource).invented,
     []
   );
   equal(
