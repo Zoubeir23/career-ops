@@ -154,6 +154,16 @@ try {
     // were surfaced as funding leads.
     ['techcrunch', 'Acme raises $40M Series A, then cuts 30% of staff'],
     ['techcrunch', 'Beta Corp raises $25M seed and cuts 15% of its workforce'],
+    // #2404 fixed one spelling of that headline. These reach the reader with
+    // the same harm — apply to a company that just announced job losses —
+    // and were still surfaced: a space before the percent, a count with no
+    // percent at all, and a different verb entirely.
+    ['techcrunch', 'Gamma raises $40M Series A, then cuts 30 % of staff'],
+    ['techcrunch', 'Delta raises $40M Series A, then cuts 1,200 jobs'],
+    ['techcrunch', 'Epsilon raises $40M Series A and lays off 300 employees'],
+    ['techcrunch', 'Zeta raises $18M Series A after job cuts'],
+    ['prnewswire', 'Eta Corp raises $30M and sheds 90 roles'],
+    ['guardian', 'Theta raises $12M seed amid a workforce reduction'],
   ].map(([source, title], idx) => ({
     source,
     title,
@@ -164,9 +174,30 @@ try {
   }));
   const negativeCandidates = mod.buildCandidates(negativeItems, { now: new Date('2026-07-20T00:00:00Z'), months: 3, limit: 10 });
   if (negativeCandidates.length === 0) {
-    pass('buildCandidates rejects funds, acquisitions, earnings, scholarships, grants, and generic fundraising advice');
+    pass('buildCandidates rejects funds, acquisitions, earnings, scholarships, grants, generic advice, and every layoff spelling');
   } else {
     fail(`buildCandidates accepted negative items: ${JSON.stringify(negativeCandidates)}`);
+  }
+
+  // The count form requires a workforce noun on purpose. A company cutting
+  // cloud spend while raising is a normal funding lead, and excluding it would
+  // trade one false positive for a lost opportunity.
+  const costCutting = [
+    ['techcrunch', 'Iota raises $40M Series A and cuts 1,200 tonnes of CO2'],
+    ['techcrunch', 'Kappa raises $25M Seed to hire 50 engineers'],
+  ].map(([source, title], idx) => ({
+    source,
+    title,
+    url: `https://example.test/cost-${idx}`,
+    observedDate: { value: '2026-07-10', precision: 'day', date: new Date('2026-07-10T00:00:00Z') },
+    text: title,
+    categories: [],
+  }));
+  const costCuttingCandidates = mod.buildCandidates(costCutting, { now: new Date('2026-07-20T00:00:00Z'), months: 3, limit: 10 });
+  if (costCuttingCandidates.length === 2) {
+    pass('a count with no workforce noun is still a funding lead — the exclusion is not a blanket "cuts" ban');
+  } else {
+    fail(`cost-cutting/hiring headlines were dropped: kept ${JSON.stringify(costCuttingCandidates.map((c) => c.company))}`);
   }
 
   const mixedDates = [
