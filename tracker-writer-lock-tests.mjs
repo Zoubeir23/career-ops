@@ -218,7 +218,19 @@ async function runWhileLocked({
     // entries already have a stronger, script-specific ordering signal (their
     // pre-lock review prompt), and a writer parked at that prompt has not
     // reached the lock yet, so the guard wait is skipped for them.
-    await contention?.wait(CONTENTION_WAIT_MS);
+    //
+    // The boolean IS the discrimination signal, so it is consumed rather than
+    // discarded (#2436). If the recover guard ever stops being emitted — a
+    // rename, or the guard becoming conditional — every guard-watched case
+    // would burn the full CONTENTION_WAIT_MS and then silently fall back to
+    // the old timing-dependent ordering: the suite stays green, or goes back
+    // to flaking, with nothing pointing at the missing signal. The fallback
+    // inside watchForContention is deliberate (it degrades instead of
+    // hanging); what was missing is a consumer that says so out loud.
+    const sawContention = contention ? await contention.wait(CONTENTION_WAIT_MS) : true;
+    if (!sawContention) {
+      fail(`${name}: recover guard never appeared within ${CONTENTION_WAIT_MS}ms — the mutation ordering signal is gone, so this case no longer discriminates a pre-lock read from a post-lock one`);
+    }
     // Simulate the current lock owner committing another row. The waiting
     // writer must read this fresh version after acquiring the lock; a writer
     // that reads before locking will erase row #99 with its stale snapshot.
