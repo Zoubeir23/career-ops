@@ -832,12 +832,16 @@ await testLiveRecoverGuardIsNotEvicted();
 // suite stays green (or returns to flaking) with nothing pointing at the cause.
 // One observation is enough to prove the signal exists; zero across the whole
 // matrix is the regression.
-if (contentionWatchedCases > 0) {
-  if (contentionObservedCases > 0) {
-    pass(`recover guard observed in ${contentionObservedCases}/${contentionWatchedCases} guard-watched cases — the mutation ordering signal is live`);
-  } else {
-    fail(`recover guard never observed in any of the ${contentionWatchedCases} guard-watched cases — acquireTrackerLock has stopped emitting it, so every one of them fell back to timing-dependent ordering`);
-  }
+if (contentionWatchedCases === 0) {
+  // Skipping the assertion when nothing was watched would reproduce the very
+  // defect this file is fixing: a matrix change that drops every guard-watched
+  // case leaves the suite green while nothing validates the recover guard at
+  // all. Zero watched cases is itself the regression (CodeRabbit review).
+  fail('no guard-watched case ran — the matrix no longer exercises the recover guard, so nothing validates the mutation ordering signal');
+} else if (contentionObservedCases > 0) {
+  pass(`recover guard observed in ${contentionObservedCases}/${contentionWatchedCases} guard-watched cases — the mutation ordering signal is live`);
+} else {
+  fail(`recover guard never observed in any of the ${contentionWatchedCases} guard-watched cases — acquireTrackerLock has stopped emitting it, so every one of them fell back to timing-dependent ordering`);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
