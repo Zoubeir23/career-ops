@@ -584,7 +584,21 @@ function isExcludedFundingItem(item) {
     // funding leads. Same symbol-edge class as the fix in #2227. For every
     // other alternative (all of which end in a word character) \b and the
     // lookarounds are equivalent, so their behaviour is unchanged.
-    /(?<!\w)(acquires?|acquired|acquisition|merger|spac|ipo|bankruptcy|layoffs?|cuts?\s+\d+%|earnings|quarterly results)(?!\w)/i,
+    /(?<!\w)(acquires?|acquired|acquisition|merger|spac|ipo|bankruptcy|layoffs?|cuts?\s+\d[\d,.]*\s*%|earnings|quarterly results)(?!\w)/i,
+    // A layoff announced in the same headline as a raise is the case #2404
+    // fixed, but it only covered the "cuts N%" spelling. Three others reach
+    // the same reader with the same harm — the tool recommends applying to a
+    // company that just announced job losses:
+    //   "raises $40M …, then cuts 1,200 jobs"      (a count, no percent)
+    //   "raises $40M … and lays off 300 employees" (a different verb)
+    //   "raises $40M …, cuts 30 % of staff"        (a space before the percent,
+    //                                               handled by the widened
+    //                                               alternative above)
+    // The count form REQUIRES a workforce noun: "cuts 30% of cloud costs" is a
+    // cost story at a company that may well still be hiring, and excluding it
+    // would lose a real lead.
+    /(?<!\w)(cuts?|axes|slashes|eliminates|sheds)\s+\d[\d,.]*\s+(jobs|roles|positions|staff|employees|workers|headcount)(?!\w)/i,
+    /\b(lays?\s+off|laying\s+off|laid\s+off|job\s+cuts|workforce\s+reduction|headcount\s+reduction)\b/i,
     /\b(public offering|registered direct offering|private placement|atm offering|offering of common stock)\b/i,
     /\braises?\s+\$[\d,.]+(?:\.\d+)?\s*(?:billion|million|bn|m|b|k)?\s+fund\b/i,
     /\b(venture fund|vc fund|investment fund|private equity fund|capital fund|fund ii|fund iii|fund iv|new fund)\b/i,
