@@ -1939,8 +1939,25 @@ if (shared.includes('_profile.md')) {
   // "Read:" list (email.md). Matching only the inline form would have called
   // email.md non-compliant while it reads the file perfectly well.
   const WRITING_CONSUMERS = ['modes/cover.md', 'modes/email.md'];
-  const READS_WRITING = /(?:^|\n)\s*(?:[-*]\s*)?(?:Read|read)?[^.\n]{0,60}`modes\/_writing\.md`/;
-  const missingRead = WRITING_CONSUMERS.filter((path) => !READS_WRITING.test(readFile(path)));
+  // The two directive shapes are matched SEPARATELY, and the verb is required
+  // in both. Making `Read` optional would let a bare mention satisfy the guard
+  // — "Do not read `modes/_writing.md`", or a path in a table cell — so the
+  // assertion could stay green after the actual read was deleted, which is the
+  // one thing it exists to catch.
+  const readsWritingModule = (source) => {
+    let inReadList = false;
+    for (const line of source.split(/\r?\n/)) {
+      // Inline: "Read `modes/_writing.md` — …" (cover.md).
+      if (/^\s*Read\b[^\n]*`modes\/_writing\.md`/i.test(line)) return true;
+      // Bullet under a "Read:" header (email.md). The list ends at the first
+      // non-bullet, non-blank line.
+      if (/^\s*Read:\s*$/i.test(line)) { inReadList = true; continue; }
+      if (inReadList && /^\s*[-*]\s*`modes\/_writing\.md`/.test(line)) return true;
+      if (inReadList && line.trim() && !/^\s*[-*]/.test(line)) inReadList = false;
+    }
+    return false;
+  };
+  const missingRead = WRITING_CONSUMERS.filter((path) => !readsWritingModule(readFile(path)));
   if (missingRead.length === 0) {
     pass('cover.md and email.md load modes/_writing.md (#2006)');
   } else {
