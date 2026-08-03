@@ -12,7 +12,7 @@ import { pathToFileURL } from 'url';
 console.log('\ncli-flags — value-taking flags in both forms');
 
 try {
-  const { flagValue } = await import(pathToFileURL(join(ROOT, 'lib/cli-flags.mjs')).href);
+  const { flagValue, hasFlag } = await import(pathToFileURL(join(ROOT, 'lib/cli-flags.mjs')).href);
 
   const check = (label, actual, expected) => {
     if (actual === expected) pass(label);
@@ -47,6 +47,18 @@ try {
   // rather than throwing inside a CLI's argument parsing.
   check('a non-array argv yields undefined', flagValue(null, '--file'), undefined);
   check('a non-string entry is skipped', flagValue([42, '--file=a.md'], '--file'), 'a.md');
+
+  // hasFlag exists because flagValue cannot separate "absent" from "supplied
+  // with no value" — both are undefined, and treating the second as absent is
+  // how `test-all --only` came to run the whole suite instead of refusing a
+  // filter it could not honour (CodeRabbit review).
+  check('hasFlag sees the space form', hasFlag(['--only', 'x'], '--only'), true);
+  check('hasFlag sees a bare trailing flag', hasFlag(['--only'], '--only'), true);
+  check('hasFlag sees the equals form', hasFlag(['--only=x'], '--only'), true);
+  check('hasFlag sees an explicitly empty value', hasFlag(['--only='], '--only'), true);
+  check('hasFlag is false when absent', hasFlag(['--summary'], '--only'), false);
+  check('hasFlag respects the prefix boundary', hasFlag(['--only-me'], '--only'), false);
+  check('hasFlag on a non-array is false', hasFlag(null, '--only'), false);
 } catch (e) {
   fail(`cli-flags tests crashed: ${e.message}`);
 }
