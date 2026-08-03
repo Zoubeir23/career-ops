@@ -738,9 +738,32 @@ export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ct
   }
 
   const changedLocally = new Set(diffNames(baseline || 'HEAD'));
-  if (changedLocally.size === 0) return [];
   const differsFromUpstream = new Set(diffNames(upstreamRef));
-  return [...changedLocally].filter((file) => differsFromUpstream.has(file)).sort();
+  const atRisk = [...changedLocally].filter((file) => differsFromUpstream.has(file));
+
+  // `git diff` never lists untracked files, so a file created locally at a path
+  // the upstream ref DOES ship escapes both sets above — and the checkout
+  // overwrites it with no warning and no .bak, which is the very loss mode this
+  // exists to prevent. Only untracked files upstream actually ships can be
+  // clobbered, so the upstream existence check is the whole filter.
+  let untracked = [];
+  try {
+    untracked = runGit('ls-files', '--others', '--exclude-standard', '--', ...paths)
+      .split('\n').map((f) => f.trim()).filter(Boolean);
+  } catch {
+    // Same degradation contract as diffNames: a warning we cannot compute must
+    // never abort the update.
+  }
+  for (const file of untracked) {
+    try {
+      runGit('cat-file', '-e', `${upstreamRef}:${file}`);
+      atRisk.push(file);
+    } catch {
+      // Purely local file, absent upstream — the checkout cannot touch it.
+    }
+  }
+
+  return [...new Set(atRisk)].sort();
 }
 
 export function revertPaths(paths, protectedPaths = new Set(), ctx = {}) {

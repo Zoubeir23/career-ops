@@ -24,6 +24,11 @@ function makeRepo() {
   g('init', '-q', '-b', 'main', '.');
   g('config', 'user.email', 'test@example.com');
   g('config', 'user.name', 'Test');
+  // A developer or CI image with commit.gpgsign or a global core.hooksPath
+  // would make every commit below fail, and all cases would go red for a
+  // reason that has nothing to do with the detector (CodeRabbit review).
+  g('config', 'commit.gpgsign', 'false');
+  g('config', 'core.hooksPath', join(dir, 'no-such-hooks'));
   mkdirSync(join(dir, 'modes'), { recursive: true });
   writeFileSync(join(dir, 'modes', 'pdf.md'), 'shipped pdf\n');
   writeFileSync(join(dir, 'modes', 'cover.md'), 'shipped cover\n');
@@ -153,6 +158,43 @@ const PATHS = ['modes/', 'generate-cover-letter.mjs'];
     pass('an unreadable upstream ref returns a list instead of throwing');
   } else {
     fail('#7 a bad ref must not throw — it would abort the whole update');
+  }
+}
+
+// ── 7b. An untracked local file the upstream ref ships is at risk too ──
+//    `git diff` never lists untracked files, so this one escaped the two diff
+//    sets entirely and would have been overwritten with no warning and no .bak.
+{
+  const repo = makeRepo();
+  // Ships upstream, absent from the install's baseline.
+  repo.g('checkout', '-q', 'upstream');
+  writeFileSync(join(repo.dir, 'modes', 'new-mode.md'), 'upstream new mode\n');
+  repo.g('add', '-A');
+  repo.g('commit', '-qm', 'upstream: new mode');
+  repo.g('checkout', '-q', 'main');
+  // The user wrote their own file at that exact path before updating.
+  writeFileSync(join(repo.dir, 'modes', 'new-mode.md'), 'my own notes\n');
+
+  const atRisk = locallyModifiedSystemFiles(PATHS, 'upstream', repo.ctx);
+  if (atRisk.includes('modes/new-mode.md')) {
+    pass('an untracked local file the upstream ref ships is reported');
+  } else {
+    fail(`#7b expected modes/new-mode.md, got ${JSON.stringify(atRisk)}`);
+  }
+}
+
+// ── 7c. An untracked file absent upstream is NOT reported ──
+//    The checkout cannot touch it, so listing it would be pure noise.
+{
+  const repo = makeRepo();
+  upstreamChange(repo, 'modes/pdf.md', 'shipped pdf v2\n');
+  writeFileSync(join(repo.dir, 'modes', 'my-scratch.md'), 'purely local\n');
+
+  const atRisk = locallyModifiedSystemFiles(PATHS, 'upstream', repo.ctx);
+  if (!atRisk.includes('modes/my-scratch.md')) {
+    pass('a purely local untracked file is left out of the warning');
+  } else {
+    fail(`#7c my-scratch.md should not be listed: ${JSON.stringify(atRisk)}`);
   }
 }
 
