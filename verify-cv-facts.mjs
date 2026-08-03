@@ -430,6 +430,46 @@ function runSelfTest() {
   // A four-digit left part is a year, not a group: nothing is joined.
   equal('a year is not glued to the next number', auditClaims('Joined in 2026 100 users', foldSource).invented, ['100 users']);
 
+  // #2279 — the modifier count must never decide whether a claim exists. The
+  // source words the fact with three modifiers, the CV with two: at the old
+  // {0,2} window the claim was extracted from the CV side only, and a true
+  // statement failed the gate.
+  const modifierSource = 'Consolidated 25+ services down to ~5 live Cloud Run deployments.';
+  equal(
+    'same number, fewer modifiers in the CV',
+    auditClaims('25+ services consolidated to ~5 Cloud Run deployments', modifierSource).invented,
+    []
+  );
+  equal(
+    'same number, more modifiers in the CV',
+    auditClaims('Consolidated to ~5 live production Cloud Run deployments', modifierSource).invented,
+    []
+  );
+  // The direction that matters: a CHANGED number hid behind the 3-modifier
+  // phrasing, because the CV side yielded no claim to compare at all.
+  equal(
+    'changed number behind three modifiers is caught',
+    auditClaims('Consolidated to ~9 live Cloud Run deployments', modifierSource).invented,
+    ['9 deployments']
+  );
+  equal(
+    'changed number with the plain phrasing is still caught',
+    auditClaims('Consolidated to ~9 Cloud Run deployments', modifierSource).invented,
+    ['9 deployments']
+  );
+  // A wider window must not let the chain jump over an intervening figure to
+  // bind a number to a noun it does not count.
+  equal(
+    'a figure still blocks the chain',
+    auditClaims('Ran 7 experiments over 40 hours', 'Ran 7 experiments over 40 hours').invented,
+    []
+  );
+  equal(
+    'no cross-number binding invents evidence',
+    auditClaims('Shipped 3 integrations', 'Shipped 3 features across 12 integrations').invented,
+    ['3 integrations']
+  );
+
   console.log(`verify-cv-facts self-test: ${passed} passed, ${failed} failed`);
   return failed ? 1 : 0;
 }
