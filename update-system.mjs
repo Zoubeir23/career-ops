@@ -683,6 +683,62 @@ export function prepareMaterializedSkillEntrypointsForStage(paths, root = ROOT) 
   return prepared;
 }
 
+/**
+ * System-layer files this install changed locally that the update is about to
+ * overwrite (#2337).
+ *
+ * apply() checks out every SYSTEM_PATHS entry from the upstream ref — a raw
+ * checkout, not a merge — so a local fix to a system file is discarded with no
+ * diff, no warning, and no list. The system layer stays system-owned (this is
+ * NOT a merge, by design); the point is telling people what they are about to
+ * lose.
+ *
+ * A file is at risk only when BOTH hold:
+ *
+ *   1. it differs from the merge-base — the last commit this install shares
+ *      with upstream, i.e. the baseline it was last synced to. Anything that
+ *      differs from it was changed HERE, whether committed or still in the
+ *      working tree (`git diff <ref> -- <path>` compares against the worktree);
+ *   2. it differs from the upstream ref. A local fix upstream has since adopted
+ *      independently is byte-identical there, so the checkout costs nothing and
+ *      warning about it would be noise — the exact case the #2337 reporter
+ *      isolated when one of their two fixes survived an update.
+ *
+ * @param {string[]} paths - manifest entries (files or `dir/` prefixes).
+ * @param {string} upstreamRef - ref being checked out, normally FETCH_HEAD.
+ * @param {{git?: Function}} [ctx] - injectable git runner, for tests.
+ * @returns {string[]} repo-relative file paths, sorted.
+ */
+export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ctx = {}) {
+  const runGit = ctx.git || git;
+  if (!paths || paths.length === 0) return [];
+
+  const diffNames = (ref) => {
+    try {
+      return runGit('diff', '--name-only', ref, '--', ...paths).split('\n').map((p) => p.trim()).filter(Boolean);
+    } catch {
+      // An unreadable ref (shallow clone, unrelated histories) must never abort
+      // the update — it degrades the warning, not the checkout.
+      return [];
+    }
+  };
+
+  // Without a merge-base (unrelated histories, a shallow clone) fall back to
+  // HEAD: that still catches uncommitted local edits, which is the common case,
+  // and simply misses local edits already committed.
+  let baseline = null;
+  try {
+    baseline = runGit('merge-base', 'HEAD', upstreamRef) || null;
+  } catch {
+    baseline = null;
+  }
+
+  const changedLocally = new Set(diffNames(baseline || 'HEAD'));
+  if (changedLocally.size === 0) return [];
+  const differsFromUpstream = new Set(diffNames(upstreamRef));
+  return [...changedLocally].filter((file) => differsFromUpstream.has(file)).sort();
+}
+
 export function revertPaths(paths, protectedPaths = new Set(), ctx = {}) {
   const runGit = ctx.git || git;
   const root = ctx.root || ROOT;
