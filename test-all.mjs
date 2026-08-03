@@ -1927,6 +1927,42 @@ if (shared.includes('_profile.md')) {
   } else {
     fail(`modes still reference _shared.md for writing sections (should be _writing.md): ${stale.join(', ')}`);
   }
+
+  // #2006 — cover.md and email.md produce candidate-facing prose, so they load
+  // the shared module rather than carrying a thinner local standard. A mode
+  // that DELEGATES part of its wording rules to _writing.md and then loses the
+  // read directive silently drops those rules: the delegating prose stays,
+  // pointing at a file nobody opens. Assert the read, not just the mention.
+  //
+  // Two shapes count as a read directive, because both are used in modes/:
+  // inline ("Read `modes/_writing.md` — …", cover.md) and a bullet inside a
+  // "Read:" list (email.md). Matching only the inline form would have called
+  // email.md non-compliant while it reads the file perfectly well.
+  const WRITING_CONSUMERS = ['modes/cover.md', 'modes/email.md'];
+  const READS_WRITING = /(?:^|\n)\s*(?:[-*]\s*)?(?:Read|read)?[^.\n]{0,60}`modes\/_writing\.md`/;
+  const missingRead = WRITING_CONSUMERS.filter((path) => !READS_WRITING.test(readFile(path)));
+  if (missingRead.length === 0) {
+    pass('cover.md and email.md load modes/_writing.md (#2006)');
+  } else {
+    fail(`these modes delegate wording to _writing.md but never read it: ${missingRead.join(', ')} (#2006)`);
+  }
+
+  // The delegation must not have taken the mode-specific contracts with it:
+  // those are set locally and _writing.md says nothing about them.
+  const coverSrc = readFile('modes/cover.md');
+  const emailSrc = readFile('modes/email.md');
+  const contractsIntact =
+    /350-420 words/.test(coverSrc) &&
+    /Bullet format/.test(coverSrc) &&
+    /Self-check/.test(coverSrc) &&
+    /Tone consistency/.test(coverSrc) &&
+    /Attachment checklist/i.test(emailSrc) &&
+    /Do not write files unless the user explicitly asks/.test(emailSrc);
+  if (contractsIntact) {
+    pass('cover/email output contracts survived the _writing.md delegation (#2006)');
+  } else {
+    fail('a cover/email output contract (word count, bullet format, self-check, tone, attachments, draft-only) went missing (#2006)');
+  }
 }
 
 // --- _custom.md must be READ, not just written (#1388): Sources of Truth row +
