@@ -71,6 +71,18 @@ export function normalizeCurrency(raw) {
 }
 
 /**
+ * The feed URL, built in ONE place: detect() reports it and fetch() requests
+ * it, so building it twice would let the reported URL drift from the one
+ * actually called the day a second query parameter is added.
+ *
+ * @param {any} entry
+ * @returns {string}
+ */
+function buildFeedUrl(entry) {
+  return `${FEED_BASE}?lang=${resolveLang(entry)}`;
+}
+
+/**
  * Build the `{min, max, currency}` shape scan.mjs's salary_filter consumes.
  * Returns null when the offer carries no usable figure, which the filter
  * treats as "no data" and passes.
@@ -171,16 +183,14 @@ export default {
   id: 'manfred',
 
   detect(entry) {
-    return entry?.provider === 'manfred'
-      ? { url: `${FEED_BASE}?lang=${resolveLang(entry)}` }
-      : null;
+    return entry?.provider === 'manfred' ? { url: buildFeedUrl(entry) } : null;
   },
 
   async fetch(entry, ctx) {
     // Validate the URL actually fetched (not just a constant) so the host pin
     // is meaningful, then redirect:'error' blocks SSRF via server-side
     // redirects — together they keep the request on getmanfred.com.
-    const url = assertManfredUrl(`${FEED_BASE}?lang=${resolveLang(entry)}`);
+    const url = assertManfredUrl(buildFeedUrl(entry));
     const json = /** @type {any} */ (await ctx.fetchJson(url, { redirect: 'error' }));
     if (!Array.isArray(json)) {
       throw new Error(
