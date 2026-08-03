@@ -14,6 +14,7 @@ import { join, dirname, resolve } from 'path';
 import { tmpdir } from 'os';
 import { fileURLToPath, pathToFileURL } from 'url';
 import yaml from 'js-yaml';
+import { flagValue } from './lib/cli-flags.mjs';
 
 const ROOT = dirname(fileURLToPath(import.meta.url));
 const PROVIDERS_DIR = join(ROOT, 'providers');
@@ -281,8 +282,8 @@ async function main() {
     return;
   }
 
-  const fileFlag = args.indexOf('--file');
-  const filePath = resolve(fileFlag === -1 ? DEFAULT_PORTALS_PATH : args[fileFlag + 1] || '');
+  const fileFlag = flagValue(args, '--file');
+  const filePath = resolve(fileFlag === undefined ? DEFAULT_PORTALS_PATH : fileFlag || '');
   if (!filePath) {
     console.error('Usage: node validate-portals.mjs [--file portals.yml] [--self-test]');
     process.exit(1);
