@@ -907,6 +907,11 @@ search_queries:
 #   max_pages: 3                          # 100 jobs/page; raise for deeper coverage
 #   enabled: true
 #
+# - name: getManfred                      # Spanish/EU tech roles, salary ranges published
+#   provider: manfred
+#   lang: EN                              # EN or ES; the API rejects the call without it
+#   enabled: true
+#
 # - name: Hacker News "Who is hiring?"    # monthly "Ask HN: Who is hiring?" thread
 #   provider: hackernews
 #   enabled: true
