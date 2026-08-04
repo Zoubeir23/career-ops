@@ -208,7 +208,13 @@ export function factClaims(text) {
     // that case-insensitive would read "worked at the office as a manager" as
     // an employer claim. Only the trigger words carry an explicit case class.
     ['employer', /\b(?:[Ww]orked [Aa]t|[Jj]oined|[Ee]mployer\s*:\s*|[Cc]ompany\s*:\s*)\s*([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,4})/g],
-    ['title', /\b(?:[Ss]erved [Aa]s|[Ww]orked [Aa]s|[Tt]itle\s*:\s*|[Rr]ole\s*:\s*)\s*(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+[A-Z][\w/-]*){0,4})|\b(?:[Ww]orked [Aa]t|[Jj]oined)\s+[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,4}\s+[Aa]s\s+(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+[A-Z][\w/-]*){0,4})/g],
+    // A title may carry a lowercase connector: stopping at it truncated "Head
+    // of Data" to "head", which made it indistinguishable from "Head of
+    // Engineering" — so an inflated title compared equal to the real one and
+    // passed the gate (CodeRabbit review). The connector list is closed and
+    // each one must be followed by another Capitalised word, so the capture
+    // cannot wander into ordinary prose.
+    ['title', /\b(?:[Ss]erved [Aa]s|[Ww]orked [Aa]s|[Tt]itle\s*:\s*|[Rr]ole\s*:\s*)\s*(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+(?:of|for|and|the)\s+[A-Z][\w/-]*|\s+[A-Z][\w/-]*){0,4})|\b(?:[Ww]orked [Aa]t|[Jj]oined)\s+[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,4}\s+[Aa]s\s+(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+(?:of|for|and|the)\s+[A-Z][\w/-]*|\s+[A-Z][\w/-]*){0,4})/g],
     ['tool', /\b(?:using|built with|worked with|technologies?\s*:\s*|tech stack\s*:\s*)([^.;\n]+?)(?=\s+\bfor\b|[.;\n]|$)/gi],
   ];
   for (const [kind, pattern] of patterns) {
@@ -448,7 +454,12 @@ function runSelfTest() {
     ['employer:initech', 'title:principal engineer']);
   equal('Joined, capitalised', kinds('Joined Globex in 2024'), ['employer:globex']);
   equal('Employer: label, capitalised', kinds('Employer: Initech'), ['employer:initech']);
-  equal('Served as, capitalised', kinds('Served as Head of Data'), ['title:head']);
+  // A lowercase connector is part of the title: truncating at it made "Head of
+  // Data" and "Head of Engineering" the same claim, so an inflated title
+  // matched the real one and passed (CodeRabbit review).
+  equal('a connector keeps the title whole', kinds('Served as Head of Data'), ['title:head of data']);
+  equal('an inflated title is a different claim', kinds('Served as Head of Engineering'), ['title:head of engineering']);
+  equal('a longer title survives too', kinds('Served as Vice President of Sales'), ['title:vice president of sales']);
   // The capture stays case-SENSITIVE: only the triggers are relaxed, so
   // ordinary prose is never read as an employer or title claim.
   equal('ordinary prose is not a claim', kinds('Worked at the office as a manager'), []);
