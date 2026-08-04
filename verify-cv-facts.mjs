@@ -460,6 +460,12 @@ function runSelfTest() {
   equal('a connector keeps the title whole', kinds('Served as Head of Data'), ['title:head of data']);
   equal('an inflated title is a different claim', kinds('Served as Head of Engineering'), ['title:head of engineering']);
   equal('a longer title survives too', kinds('Served as Vice President of Sales'), ['title:vice president of sales']);
+  // The title expression is duplicated across the two alternatives, so the
+  // connector must be covered on the "Worked at X as Y" branch as well — a fix
+  // applied to one and not the other would pass every test above (CodeRabbit).
+  equal('the connector works on the worked-at branch too',
+    kinds('Worked at Initech as Head of Data'),
+    ['employer:initech', 'title:head of data']);
   // The capture stays case-SENSITIVE: only the triggers are relaxed, so
   // ordinary prose is never read as an employer or title claim.
   equal('ordinary prose is not a claim', kinds('Worked at the office as a manager'), []);
