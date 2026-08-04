@@ -1935,6 +1935,59 @@ if (shared.includes('_profile.md')) {
   } else {
     fail(`modes still reference _shared.md for writing sections (should be _writing.md): ${stale.join(', ')}`);
   }
+
+  // #2006 — cover.md and email.md produce candidate-facing prose, so they load
+  // the shared module rather than carrying a thinner local standard. A mode
+  // that DELEGATES part of its wording rules to _writing.md and then loses the
+  // read directive silently drops those rules: the delegating prose stays,
+  // pointing at a file nobody opens. Assert the read, not just the mention.
+  //
+  // Two shapes count as a read directive, because both are used in modes/:
+  // inline ("Read `modes/_writing.md` — …", cover.md) and a bullet inside a
+  // "Read:" list (email.md). Matching only the inline form would have called
+  // email.md non-compliant while it reads the file perfectly well.
+  const WRITING_CONSUMERS = ['modes/cover.md', 'modes/email.md'];
+  // The two directive shapes are matched SEPARATELY, and the verb is required
+  // in both. Making `Read` optional would let a bare mention satisfy the guard
+  // — "Do not read `modes/_writing.md`", or a path in a table cell — so the
+  // assertion could stay green after the actual read was deleted, which is the
+  // one thing it exists to catch.
+  const readsWritingModule = (source) => {
+    let inReadList = false;
+    for (const line of source.split(/\r?\n/)) {
+      // Inline: "Read `modes/_writing.md` — …" (cover.md).
+      if (/^\s*Read\b[^\n]*`modes\/_writing\.md`/i.test(line)) return true;
+      // Bullet under a "Read:" header (email.md). The list ends at the first
+      // non-bullet, non-blank line.
+      if (/^\s*Read:\s*$/i.test(line)) { inReadList = true; continue; }
+      if (inReadList && /^\s*[-*]\s*`modes\/_writing\.md`/.test(line)) return true;
+      if (inReadList && line.trim() && !/^\s*[-*]/.test(line)) inReadList = false;
+    }
+    return false;
+  };
+  const missingRead = WRITING_CONSUMERS.filter((path) => !readsWritingModule(readFile(path)));
+  if (missingRead.length === 0) {
+    pass('cover.md and email.md load modes/_writing.md (#2006)');
+  } else {
+    fail(`these modes delegate wording to _writing.md but never read it: ${missingRead.join(', ')} (#2006)`);
+  }
+
+  // The delegation must not have taken the mode-specific contracts with it:
+  // those are set locally and _writing.md says nothing about them.
+  const coverSrc = readFile('modes/cover.md');
+  const emailSrc = readFile('modes/email.md');
+  const contractsIntact =
+    /350-420 words/.test(coverSrc) &&
+    /Bullet format/.test(coverSrc) &&
+    /Self-check/.test(coverSrc) &&
+    /Tone consistency/.test(coverSrc) &&
+    /Attachment checklist/i.test(emailSrc) &&
+    /Do not write files unless the user explicitly asks/.test(emailSrc);
+  if (contractsIntact) {
+    pass('cover/email output contracts survived the _writing.md delegation (#2006)');
+  } else {
+    fail('a cover/email output contract (word count, bullet format, self-check, tone, attachments, draft-only) went missing (#2006)');
+  }
 }
 
 // --- _custom.md must be READ, not just written (#1388): Sources of Truth row +
@@ -8557,6 +8610,101 @@ try {
   }
 } catch (e) {
   fail(`non-Latin via guard tests crashed: ${e.message}`);
+}
+
+// ── MERGE-TRACKER: DISTINCT NON-LATIN COMPANIES (#2429) ───────────
+// Sibling of the #1603 via guard, one column over. normalizeCompany() stripped
+// [^a-z0-9], so EVERY non-Latin company name folded to '' and compared equal to
+// every other one — merge-tracker's company+role fallback then treated
+// applications at two different companies as the same row and silently
+// overwrote one. applications.md is gitignored with no .bak, so the losing
+// evaluation was unrecoverable.
+console.log('\n🧪 Testing merge-tracker with distinct non-Latin companies (#2429)...');
+try {
+  const { normalizeCompany } = await import(pathToFileURL(join(ROOT, 'tracker-utils.mjs')).href);
+
+  // Unit: distinct scripts must produce distinct, non-empty keys.
+  const keys = ['アクメ株式会社', 'グロベックス合同会社', 'Яндекс', '北京字节跳动'].map(normalizeCompany);
+  if (keys.every(k => k !== '') && new Set(keys).size === keys.length) {
+    pass('normalizeCompany gives every non-Latin company a distinct non-empty key (#2429)');
+  } else {
+    fail(`non-Latin company keys collapsed: ${JSON.stringify(keys)}`);
+  }
+  // Combining marks must SURVIVE the fold. Indic matras have no precomposed
+  // form, so a key that strips \p{M} makes Devanagari कंपनी and कपनी (and क
+  // and का) identical — re-introducing, for the shipped hi/ar locales, exactly
+  // the collision this fix removes for ja/zh/ru. This is why normalizeCompany
+  // delegates to normalizeTextKey (which keeps \p{M}) rather than to a
+  // company-local fold (#2429 review, #2445).
+  const markPairs = [['कंपनी', 'कपनी'], ['क', 'का']];
+  if (markPairs.every(([a, b]) => normalizeCompany(a) !== normalizeCompany(b))) {
+    pass('company keys keep combining marks, so Devanagari names differing only in matras stay distinct (#2429)');
+  } else {
+    fail('combining marks stripped from the company key — Indic names differing only in matras now collide');
+  }
+  // The `?` unknown-employer marker MUST still fold to '' — the #1596
+  // cross-channel guard depends on those rows sharing one key.
+  if (normalizeCompany('?') === '' && normalizeCompany('—') === '') {
+    pass('punctuation-only company still folds to the empty key, preserving the #1596 guard (#2429)');
+  } else {
+    fail('punctuation-only company no longer folds to empty — the #1596 cross-channel guard is broken');
+  }
+  // NFKC: full-width and half-width spellings are the same company.
+  if (normalizeCompany('ＡＣＭＥ') === normalizeCompany('ACME')) {
+    pass('NFKC folds full-width and half-width company spellings together (#2429)');
+  } else {
+    fail('full-width company name did not fold to its half-width spelling');
+  }
+  // Latin path unchanged.
+  if (normalizeCompany('Acme Inc.') === 'acmeinc' && normalizeCompany('ACME, INC') === 'acmeinc') {
+    pass('Latin company keys are unchanged by the Unicode-aware fold (#2429)');
+  } else {
+    fail('Latin company key changed — existing dedup/selector behaviour would shift');
+  }
+
+  // End-to-end: two different non-Latin companies, fuzzy-matching role titles.
+  const coTmp = mkdtempSync(join(tmpdir(), 'career-ops-nonlatin-co-'));
+  try {
+    mkdirSync(join(coTmp, 'data'));
+    mkdirSync(join(coTmp, 'reports'));
+    const additionsDir = join(coTmp, 'additions');
+    mkdirSync(additionsDir);
+    const tracker = join(coTmp, 'data', 'applications.md');
+    writeFileSync(tracker,
+      '# Applications Tracker\n\n' +
+      '| # | Date | Company | Role | Score | Status | PDF | Report | Notes |\n' +
+      '|---|------|---------|------|-------|--------|-----|--------|-------|\n' +
+      '| 1 | 2026-01-04 | アクメ株式会社 | Backend Engineer, Payments Platform | 4.0/5 | Evaluated | ❌ | [1](../reports/001-acme-2026-01-04.md) | first company |\n');
+    for (const n of ['001-acme-2026-01-04', '002-globex-2026-01-05']) {
+      writeFileSync(join(coTmp, 'reports', `${n}.md`), '# fixture\n');
+    }
+    // DIFFERENT company, same role title → a real second application that must
+    // be ADDED, not silently merged over the first.
+    writeFileSync(join(additionsDir, '002-globex.tsv'),
+      '2\t2026-01-05\tグロベックス合同会社\tBackend Engineer, Payments Platform\tEvaluated\t4.1/5\t❌\t[2](reports/002-globex-2026-01-05.md)\tsecond company\n');
+
+    const coResult = run(NODE, ['merge-tracker.mjs'], { env: { ...process.env, CAREER_OPS_TRACKER: tracker, CAREER_OPS_ADDITIONS: additionsDir } });
+    if (coResult === null) {
+      fail('merge-tracker.mjs crashed during non-Latin company test (#2429)');
+    } else {
+      const merged = readFileSync(tracker, 'utf-8');
+      if (merged.includes('アクメ株式会社') && merged.includes('グロベックス合同会社')) {
+        pass('two different non-Latin companies stay two rows (#2429)');
+      } else {
+        fail('a non-Latin company was silently overwritten by a different one — the evaluation is unrecoverable (#2429)');
+      }
+      const rows = merged.split('\n').filter(l => l.startsWith('| ') && /\| \d+ \|/.test(l));
+      if (rows.length === 2) {
+        pass('merge-tracker added the second non-Latin company instead of merging (#2429)');
+      } else {
+        fail(`expected 2 tracker rows after merge, got ${rows.length}`);
+      }
+    }
+  } finally {
+    rmSync(coTmp, { recursive: true, force: true });
+  }
+} catch (e) {
+  fail(`non-Latin company tests crashed: ${e.message}`);
 }
 
 // ── MERGE-TRACKER TSV COLUMN-ORDER TOLERANCE (#1427) ─────────────
