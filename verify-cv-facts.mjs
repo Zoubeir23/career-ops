@@ -133,6 +133,14 @@ export function stripMarkup(text) {
     // and `[^>]` matches newlines — so the old `/<[^>]+>/g` let one stray `<` swallow
     // everything up to the next `>`, deleting real evidence from the allow-list and
     // failing truthful CVs (article-digest.md lost 1,327 chars, incl. two metrics).
+    // A BLOCK boundary becomes a sentence break, not a space. Collapsing
+    // `</li><li>` to ' ' glues two bullets into one line, and the employer /
+    // title captures chain consecutive Capitalised words — so a truthful
+    // "…as a Principal Engineer" followed by a bullet starting "Built…" was
+    // read as the title "Principal Engineer Built", which no source contains.
+    // The markdown sources never had the problem (their newlines break the
+    // chain), so the two sides now normalise the same way.
+    .replace(/<\/?(?:li|p|div|tr|h[1-6]|section|article|ul|ol|table|br)\b[^>\n]*>/gi, '. ')
     .replace(/<\/?[a-zA-Z][^>\n]*>/g, ' ')
     .replace(/\\[a-zA-Z]+\*?(?:\[[^\]]*\])?(?:\{([^}]*)\})?/g, ' $1 ')
     .replace(/&nbsp;/g, ' ')
@@ -183,8 +191,24 @@ export function factClaims(text) {
   const clean = stripMarkup(text);
   const claims = [];
   const patterns = [
-    ['employer', /\b(?:worked at|joined|employer\s*:\s*|company\s*:\s*)\s*([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,4})/g],
-    ['title', /\b(?:served as|worked as|title\s*:\s*|role\s*:\s*)\s*(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+[A-Z][\w/-]*){0,4})|\b(?:worked at|joined)\s+[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,4}\s+as\s+(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+[A-Z][\w/-]*){0,4})/g],
+    // The TRIGGER is case-insensitive, the CAPTURE is not. Both patterns used
+    // to be plain /g, so only a lowercase trigger matched — and a CV is
+    // written in capitalised bullets, so the phrasings that actually occur
+    // were invisible:
+    //
+    //   "- Worked at Initech as a Principal Engineer"  ->  no claim, gate passed
+    //   "he worked at Initech as a Principal Engineer" ->  employer + title
+    //
+    // A fabricated employer or title therefore shipped unflagged in the
+    // spelling CVs use, which is the half of this gate that enforces
+    // AGENTS.md's "authorship claims are non-negotiable".
+    //
+    // The `i` flag is NOT applied to the whole regex on purpose: the capture
+    // leans on `[A-Z]` to tell a proper noun from ordinary prose, and making
+    // that case-insensitive would read "worked at the office as a manager" as
+    // an employer claim. Only the trigger words carry an explicit case class.
+    ['employer', /\b(?:[Ww]orked [Aa]t|[Jj]oined|[Ee]mployer\s*:\s*|[Cc]ompany\s*:\s*)\s*([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,4})/g],
+    ['title', /\b(?:[Ss]erved [Aa]s|[Ww]orked [Aa]s|[Tt]itle\s*:\s*|[Rr]ole\s*:\s*)\s*(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+[A-Z][\w/-]*){0,4})|\b(?:[Ww]orked [Aa]t|[Jj]oined)\s+[A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*){0,4}\s+[Aa]s\s+(?:an?\s+|the\s+)?([A-Z][\w/-]*(?:\s+[A-Z][\w/-]*){0,4})/g],
     ['tool', /\b(?:using|built with|worked with|technologies?\s*:\s*|tech stack\s*:\s*)([^.;\n]+?)(?=\s+\bfor\b|[.;\n]|$)/gi],
   ];
   for (const [kind, pattern] of patterns) {
@@ -410,6 +434,32 @@ function runSelfTest() {
   equal('an eight-digit multi-group number folds too', auditClaims('Reached 12 345 678 users', 'Reached 12345678 active users.').invented, []);
   // A four-digit left part is a year, not a group: nothing is joined.
   equal('a year is not glued to the next number', auditClaims('Joined in 2026 100 users', foldSource).invented, ['100 users']);
+
+  // The employer/title triggers used to be lowercase-only (plain /g), so the
+  // phrasing a CV actually uses — a capitalised bullet — produced NO claim,
+  // and a fabricated employer shipped unflagged. This is the half of the gate
+  // that enforces "authorship claims are non-negotiable".
+  const kinds = (text) => factClaims(text).map((f) => `${f.kind}:${f.value}`);
+  equal('a capitalised CV bullet yields employer + title',
+    kinds('- Worked at Initech as a Principal Engineer'),
+    ['employer:initech', 'title:principal engineer']);
+  equal('the lowercase phrasing still works',
+    kinds('he worked at Initech as a Principal Engineer'),
+    ['employer:initech', 'title:principal engineer']);
+  equal('Joined, capitalised', kinds('Joined Globex in 2024'), ['employer:globex']);
+  equal('Employer: label, capitalised', kinds('Employer: Initech'), ['employer:initech']);
+  equal('Served as, capitalised', kinds('Served as Head of Data'), ['title:head']);
+  // The capture stays case-SENSITIVE: only the triggers are relaxed, so
+  // ordinary prose is never read as an employer or title claim.
+  equal('ordinary prose is not a claim', kinds('Worked at the office as a manager'), []);
+  equal('ordinary prose, lowercase', kinds('joined the team as a contractor'), []);
+
+  // A block boundary is a sentence break: gluing two list items let the title
+  // capture chain across them ("Principal Engineer Built"), a string no source
+  // contains — a truthful CV failing the gate.
+  equal('a title does not chain across a list-item boundary',
+    kinds('<ul><li>Worked at Initech as a Principal Engineer</li><li>Built pipelines</li></ul>'),
+    ['employer:initech', 'title:principal engineer']);
 
   console.log(`verify-cv-facts self-test: ${passed} passed, ${failed} failed`);
   return failed ? 1 : 0;
