@@ -6200,6 +6200,16 @@ try {
     fail(`matchedTitleKeywords returned ${JSON.stringify(kw)}`);
   }
 
+  // Groups are positive-side only: on the negative side an entry is a veto, and
+  // " + " must stay literal there rather than silently becoming "reject when
+  // both appear" — which would veto far more than the user wrote.
+  const negGroup = buildTitleFilter({ positive: [], negative: ['foo + bar'] });
+  if (negGroup('Foo Bar Engineer') === true && negGroup('Widget foo + bar Lead') === false) {
+    pass('" + " in a negative entry stays a literal keyword, not an AND-group');
+  } else {
+    fail('a negative entry containing " + " was parsed as a group');
+  }
+
   // A malformed title_filter (null / numeric / empty entries) must not crash.
   const messyFilter = buildTitleFilter({ positive: ['cfo', null, 123, '', 'head of'] });
   if (messyFilter('Group CFO') === true && messyFilter('Marketing Coordinator') === false) {

@@ -94,8 +94,10 @@ export function compileKeyword(kw) {
 
 // An AND-group: " + " (whitespace-delimited) between terms means EVERY term
 // must appear in the title, in any order. `title_filter.positive` is otherwise
-// substring-only, so it can express exact spellings and nothing else — and real
-// titles vary in separator and word order:
+// matched by compileKeyword — a plain substring, EXCEPT for a 2-3 letter
+// keyword ("AI", "ML", "VP"), which is anchored on word boundaries so it
+// cannot hit inside another word. Either way an entry expresses one exact
+// spelling and nothing else, and real titles vary in separator and word order:
 //
 //   "Director of Engineering" misses  Director - Software Engineering
 //                                     Director Engineering (Mobile Platform)
