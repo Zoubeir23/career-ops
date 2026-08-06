@@ -67,11 +67,18 @@ export function loadHeaderAliases(rootDir) {
 
 /**
  * Split a tracker line into trimmed cells (outer pipes removed).
+ *
+ * The trailing empty part is dropped only when the row actually ENDS with a
+ * pipe. Hand-edited rows without it are one part narrower but still complete —
+ * tracker-utils rebuildRow supports them and parseTrackerRow reads their last
+ * cell — so an unconditional `slice(1, -1)` silently ate real data (Notes read
+ * as empty). Same rule as parseTrackerRow's width computation (#2369).
  * @param {string} line
  * @returns {string[]}
  */
 function trackerCells(line) {
-  return line.split("|").slice(1, -1).map((c) => c.trim());
+  const parts = line.split("|").map((c) => c.trim());
+  return parts.slice(1, line.trimEnd().endsWith("|") ? -1 : undefined);
 }
 
 /**
