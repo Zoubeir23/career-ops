@@ -121,6 +121,7 @@ export function detectColumnMap(lines, aliases) {
 export function parseApplications(md, rootDir) {
   const lines = md.split("\n");
   const map = detectColumnMap(lines, loadHeaderAliases(rootDir));
+  const mappedWidth = map ? Math.max(...Object.values(map)) + 1 : 0;
   const rows = [];
   for (const raw of lines) {
     const line = raw.trim();
@@ -128,6 +129,12 @@ export function parseApplications(md, rootDir) {
     const cells = trackerCells(line);
     if (cells.length < 8) continue;
     if (map) {
+      // Width guard, mirroring parseTrackerRow: a row missing an INTERIOR cell
+      // shifts every later column one left, so requiring merely that the
+      // highest mapped index EXISTS is not enough — the row must carry a cell
+      // for every mapped column. Without this the reader rendered a
+      // pre-`--migrate-via` row with Score in Role and Status in Score (#2369).
+      if (cells.length < mappedWidth) continue;
       const at = (/** @type {string} */ k) => cells[map[k]] ?? "";
       if (!/^\d+$/.test(at("n"))) continue; // header / separator / malformed
       rows.push({
