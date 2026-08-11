@@ -9,7 +9,7 @@
  * before it is overwritten, and nothing else is.
  */
 
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { pass, fail } from './helpers.mjs';
@@ -36,7 +36,9 @@ function makeRepo() {
   g('add', '-A');
   g('commit', '-qm', 'base');
   g('branch', 'upstream');
-  return { dir, g, ctx: { git: g } };
+  // `root` lets the detector check whether a path still exists on disk; without
+  // it every case below would resolve against the real career-ops checkout.
+  return { dir, g, ctx: { git: g, root: dir } };
 }
 
 /** Commit a change on the upstream branch and return to main. */
@@ -245,5 +247,70 @@ const PATHS = ['modes/', 'generate-cover-letter.mjs'];
     pass('a fully-excluded pathspec errors — hence the skip in apply() (#2337)');
   } else {
     fail(`#9 errored=${errored} content=${JSON.stringify(content)}`);
+  }
+}
+
+// ── 10. A system file the user DELETED locally is not "at risk" ──
+//    `git diff --name-only` lists deletions, so a deleted file landed in BOTH
+//    sets and therefore in atRisk. From there apply() preserved it — excluded
+//    it from the checkout — so the file was never restored, `Keeping your
+//    versions` named a file that does not exist, and the update exited 1. The
+//    printed remedy ("run apply again") could not work, because re-running
+//    reproduces the same state. A path that is not on disk cannot be
+//    overwritten, so it is not at risk.
+{
+  const repo = makeRepo();
+  upstreamChange(repo, 'modes/pdf.md', 'shipped pdf v2\n');
+  rmSync(join(repo.dir, 'modes', 'cover.md'));
+
+  const atRisk = locallyModifiedSystemFiles(PATHS, 'upstream', repo.ctx);
+  if (!atRisk.includes('modes/cover.md')) {
+    pass('a locally deleted system file is not reported as at risk');
+  } else {
+    fail(`#10 deleted file still at risk: ${JSON.stringify(atRisk)}`);
+  }
+}
+
+// ── 11. ...so the update RESTORES it ──
+//    The property the suite never asserted (santifer's review): nothing pinned
+//    that apply() brings back a system file the user deleted. Before the #2337
+//    detector the raw checkout did it for free; the detector is what could take
+//    it away, so the case belongs with the detector. Same shape as case 8: the
+//    real checkout, driven by the real atRisk exclusions.
+{
+  const repo = makeRepo();
+  upstreamChange(repo, 'modes/pdf.md', 'shipped pdf v2\n');
+  rmSync(join(repo.dir, 'modes', 'cover.md'));
+  // A genuine local edit alongside it — the deletion must not disturb it.
+  writeFileSync(join(repo.dir, 'generate-cover-letter.mjs'), 'local linkedin fix\n');
+  repo.g('commit', '-qam', 'local fix');
+
+  const atRisk = locallyModifiedSystemFiles(PATHS, 'upstream', repo.ctx);
+  repo.g('checkout', 'upstream', '--', 'modes/', ...atRisk.map((f) => `:(exclude)${f}`));
+
+  const restored = existsSync(join(repo.dir, 'modes', 'cover.md'))
+    && readFileSync(join(repo.dir, 'modes', 'cover.md'), 'utf-8') === 'shipped cover\n';
+  const localEdit = readFileSync(join(repo.dir, 'generate-cover-letter.mjs'), 'utf-8');
+  if (restored && localEdit === 'local linkedin fix\n') {
+    pass('the update restores a deleted system file and still keeps a real local edit');
+  } else {
+    fail(`#11 restored=${restored} localEdit=${JSON.stringify(localEdit)} atRisk=${JSON.stringify(atRisk)}`);
+  }
+}
+
+// ── 12. Guard: the existence filter must not swallow a real local edit ──
+//    Case 10 removes entries from atRisk, so pin that it removes ONLY missing
+//    ones — a modified file that still exists stays reported.
+{
+  const repo = makeRepo();
+  upstreamChange(repo, 'modes/cover.md', 'shipped cover v2\n');
+  writeFileSync(join(repo.dir, 'modes', 'cover.md'), 'local cover fix\n');
+  repo.g('commit', '-qam', 'local fix');
+
+  const atRisk = locallyModifiedSystemFiles(PATHS, 'upstream', repo.ctx);
+  if (atRisk.includes('modes/cover.md')) {
+    pass('a modified file that still exists is still reported');
+  } else {
+    fail(`#12 real local edit lost from atRisk: ${JSON.stringify(atRisk)}`);
   }
 }

@@ -763,7 +763,19 @@ export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ct
     }
   }
 
-  return [...new Set(atRisk)].sort();
+  // A path that is not on disk cannot be overwritten, so it is not at risk.
+  // `git diff --name-only` lists DELETIONS, so a system file the user removed
+  // landed in both sets above and was then "preserved" — excluded from the
+  // checkout, which is exactly what stops it being restored. The update printed
+  // `Keeping your versions` about a file that does not exist, failed to write
+  // its `.bak` with ENOENT, and exited 1 telling the user to run apply again;
+  // re-running reproduces the same state, so the install stayed stuck. Filtering
+  // here also gives the `.bak` failure branch back its single meaning: a backup
+  // that genuinely could not be written (permissions, full disk).
+  const root = ctx.root || ROOT;
+  return [...new Set(atRisk)]
+    .filter((file) => existsSync(join(root, ...file.split('/'))))
+    .sort();
 }
 
 export function revertPaths(paths, protectedPaths = new Set(), ctx = {}) {
