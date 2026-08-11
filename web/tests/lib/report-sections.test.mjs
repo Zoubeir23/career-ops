@@ -113,3 +113,17 @@ test("a body with no headings is all intro", () => {
   assert.equal(intro, "just prose\nand more");
   assert.deepEqual(sections, []);
 });
+
+test("the ASCII double-hyphen Block form is stripped whole", () => {
+  // modes/ja/kyujin.md and modes/hi/naukri.md write "## Block A -- Role Summary"
+  // for every block. The separator matched a SINGLE dash character, so each of
+  // those headings rendered with a stray leading hyphen ("- Role Summary") —
+  // every block of every report produced by the Japanese or Hindi mode.
+  assert.equal(cleanHeading("Block A -- Role Summary"), "Role Summary");
+  assert.equal(cleanHeading("Block F -- Interview Plan"), "Interview Plan");
+  assert.equal(cleanHeading("Block G -- Posting Legitimacy"), "Posting Legitimacy");
+  assert.equal(authorLetter("Block F -- Interview Plan"), "F");
+  // A heading whose text legitimately starts with a hyphen keeps it: only the
+  // separator run is consumed, and it must be attached to the letter.
+  assert.equal(cleanHeading("Block A) -- keep this"), "-- keep this");
+});

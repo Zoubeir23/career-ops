@@ -26,8 +26,12 @@
  * lettered heading. HEADING_LETTER below already reads that grammar as section
  * A, so leaving the prefix in the rendered heading made this file classify a
  * heading one way and display it another (CodeRabbit review).
+ *
+ * The separator is a RUN of dashes, not one character: modes/ja/kyujin.md and
+ * modes/hi/naukri.md write the ASCII "## Block A -- Role Summary", which left a
+ * stray "- " on every block of every report those modes produce.
  */
-const HEADING_PREFIX = /^\s*(?:Block\s+([A-Z])(?:[).:]\s*|\s+(?:[—–-]\s*)?)|([A-Z])[).:]\s*)/i;
+const HEADING_PREFIX = /^\s*(?:Block\s+([A-Z])(?:[).:]\s*|\s+(?:[—–-]+\s*)?)|([A-Z])[).:]\s*)/i;
 
 /**
  * Reads the letter. A bare letter needs a delimiter, exactly like the display
