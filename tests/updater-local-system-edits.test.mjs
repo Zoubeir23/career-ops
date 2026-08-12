@@ -29,6 +29,12 @@ function makeRepo() {
   // reason that has nothing to do with the detector (CodeRabbit review).
   g('config', 'commit.gpgsign', 'false');
   g('config', 'core.hooksPath', join(dir, 'no-such-hooks'));
+  // Same reasoning for line endings: the cases below write LF and later compare
+  // exact strings against files git CHECKED OUT, so a global core.autocrlf=true
+  // (the default on GitHub's Windows images) would hand back CRLF and fail them
+  // for a reason unrelated to the detector (CodeRabbit review).
+  g('config', 'core.autocrlf', 'false');
+  g('config', 'core.eol', 'lf');
   mkdirSync(join(dir, 'modes'), { recursive: true });
   writeFileSync(join(dir, 'modes', 'pdf.md'), 'shipped pdf\n');
   writeFileSync(join(dir, 'modes', 'cover.md'), 'shipped cover\n');
