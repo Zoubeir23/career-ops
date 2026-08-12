@@ -79,20 +79,45 @@ export function classifyTier(title) {
     { pattern: /\bco-op\b/i, tier: 'intern', weight: 1 },
     {
       pattern: {
-        test: (t) => /\bgraduate\b/i.test(t) && /\b(program|scheme)\b/i.test(t)
+        test: (t) => /\bgraduate\b/i.test(t) && /\b(program|scheme)\b/i.test(t),
+        // Position of the level word itself, not of the "program" qualifier.
+        search: (t) => t.search(/\bgraduate\b/i)
       },
       tier: 'intern',
       weight: 1
     }
   ];
 
+  // POSITION decides, not seniority rank. Ranking by weight meant any senior
+  // word anywhere outranked an explicit programme marker, and in real titles
+  // that word is usually naming the team, office or person the role sits beside
+  // — "Summer Intern, Director of Product" is an internship. English job titles
+  // put the level first, so the LEFTMOST marker is the role's own level. That
+  // still reads "Senior Intern Coordinator" as senior: there the senior word
+  // genuinely leads the title.
+  //
+  // This is not cosmetic: scan.mjs drops a posting whose tier is in
+  // `skip_tiers` without naming it, so a junior candidate skipping `senior`
+  // silently lost the internships they were scanning for.
+  //
+  // Weight survives only as the tie-break for two markers at the same offset,
+  // which keeps the longer, more specific pattern of an overlapping pair
+  // (`mid-level` over `mid`, `entry-level` over `entry`).
   let bestMatch = null;
+  let bestIndex = Infinity;
 
   for (const matcher of matchers) {
-    if (matcher.pattern.test(cleanTitle)) {
-      if (!bestMatch || matcher.weight > bestMatch.weight) {
-        bestMatch = matcher;
-      }
+    // Match first: the graduate matcher is a COMPOUND condition (graduate AND
+    // program/scheme), so its position alone would fire on a bare "Graduate
+    // Engineer" that the condition itself rejects.
+    if (!matcher.pattern.test(cleanTitle)) continue;
+    const index = typeof matcher.pattern.search === 'function'
+      ? matcher.pattern.search(cleanTitle)
+      : cleanTitle.search(matcher.pattern);
+    if (index < 0) continue;
+    if (index < bestIndex || (index === bestIndex && matcher.weight > bestMatch.weight)) {
+      bestMatch = matcher;
+      bestIndex = index;
     }
   }
 
