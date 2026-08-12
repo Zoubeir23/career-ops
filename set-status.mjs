@@ -417,6 +417,13 @@ if (isBareNumericSelector && !flags.force) {
 // matches its composed row.
 const normalizeRoleText = s => normalizeTextKey(
   String(s ?? '')
+    // NFKC first: normalizeTextKey folds it too, but only AFTER this pre-map, so
+    // a fullwidth ＃/＋＋ would reach the collapse unrecognized and be stripped as
+    // punctuation — "C＃ Engineer" and "C＋＋ Engineer" both keying to
+    // "c engineer". Fullwidth forms are ordinary Japanese typography, so this is
+    // the same shipped-market surface as the rest of #2670. Folding here also
+    // makes the ASCII and fullwidth spellings of one title match each other.
+    .normalize('NFKC')
     // Preserve symbols that distinguish real titles before collapsing generic
     // punctuation — otherwise "C# Engineer" and "C++ Engineer" both fold to
     // "c engineer" and the exact-equality path treats them as the same row.
