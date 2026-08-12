@@ -70,7 +70,7 @@
 import { readFileSync, existsSync, appendFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { extractTrackerReportNumbers, resolveColumns, parseTrackerRow } from './tracker-parse.mjs';
+import { extractTrackerReportNumbers, resolveColumns, parseTrackerRow, normalizeTextKey } from './tracker-parse.mjs';
 import { roleFuzzyMatch } from './role-matcher.mjs';
 import {
   rebuildRow, resolveTrackerPath, writeFileAtomic, loadCanonicalStates, resolveCanonicalState,
@@ -408,15 +408,22 @@ if (isBareNumericSelector && !flags.force) {
 // entirely baseline vocabulary (["platform","engineer"]) so that same-titled
 // sibling reqs never auto-merge. That makes it unusable on its own here — it
 // would reject --role "Platform Engineer" against a row that IS exactly that.
-const normalizeRoleText = s => String(s ?? '')
-  .toLowerCase()
-  // Preserve symbols that distinguish real titles before collapsing generic
-  // punctuation — otherwise "C# Engineer" and "C++ Engineer" both fold to
-  // "c engineer" and the exact-equality path treats them as the same row.
-  .replace(/\+\+/g, ' plusplus ')
-  .replace(/#/g, ' sharp ')
-  .replace(/[^a-z0-9]+/g, ' ')
-  .trim();
+// The collapse must drop PUNCTUATION, never letters. `[^a-z0-9]` dropped every
+// letter outside the Latin range, so any title written entirely in Japanese,
+// Arabic or Cyrillic keyed to '' — two different titles then compared equal
+// ('' === '') and the guard wrote the status to a row it had never actually
+// matched (#2670). normalizeTextKey is the Unicode-aware normalizer company
+// matching already used; it also folds NFKC, so a decomposed title still
+// matches its composed row.
+const normalizeRoleText = s => normalizeTextKey(
+  String(s ?? '')
+    // Preserve symbols that distinguish real titles before collapsing generic
+    // punctuation — otherwise "C# Engineer" and "C++ Engineer" both fold to
+    // "c engineer" and the exact-equality path treats them as the same row.
+    .replace(/\+\+/g, ' plusplus ')
+    .replace(/#/g, ' sharp '),
+  ' ',
+);
 const roleMatchesTarget = normalizeRoleText(target.role) === normalizeRoleText(flags.role)
   || roleFuzzyMatch(target.role, flags.role);
 
