@@ -81,7 +81,13 @@ export function classifyTier(title) {
       pattern: {
         test: (t) => /\bgraduate\b/i.test(t) && /\b(program|scheme)\b/i.test(t),
         // Position of the level word itself, not of the "program" qualifier.
-        search: (t) => t.search(/\bgraduate\b/i)
+        // Deliberately NOT named `search`: overloading a String.prototype method
+        // name on a matcher object makes `pattern.search(title)` read as the
+        // built-in, which coerces its argument to a RegExp — CodeQL flagged it
+        // as regex injection on the CLI's argv-derived title. The regex here is
+        // a literal and nothing is compiled from input, but the name was the
+        // problem, for a reader as much as for the analyzer.
+        levelWordIndex: (t) => t.search(/\bgraduate\b/i)
       },
       tier: 'intern',
       weight: 1
@@ -111,8 +117,8 @@ export function classifyTier(title) {
     // program/scheme), so its position alone would fire on a bare "Graduate
     // Engineer" that the condition itself rejects.
     if (!matcher.pattern.test(cleanTitle)) continue;
-    const index = typeof matcher.pattern.search === 'function'
-      ? matcher.pattern.search(cleanTitle)
+    const index = typeof matcher.pattern.levelWordIndex === 'function'
+      ? matcher.pattern.levelWordIndex(cleanTitle)
       : cleanTitle.search(matcher.pattern);
     if (index < 0) continue;
     if (index < bestIndex || (index === bestIndex && matcher.weight > bestMatch.weight)) {
