@@ -73,6 +73,49 @@ function resolveOrigin(entry) {
   return parsed.origin;
 }
 
+// Perform the anonymous GET /jobs handshake that Consider requires before
+// accepting a POST. Returns { cookie, csrfToken } — either field is null if
+// the server did not supply it. On any network failure the catch returns both
+// null so the caller can still attempt the POST (it will 412, but that is a
+// cleaner signal than a silent skip — and it keeps the same observable
+// behaviour as the pre-fix code for boards that don't enforce CSRF).
+async function acquireCsrfHandshake(origin) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), HANDSHAKE_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${origin}/jobs`, {
+      headers: { 'user-agent': BROWSER_LIKE_USER_AGENT, accept: 'text/html,*/*' },
+      signal: controller.signal,
+    });
+    if (!res.ok) return { cookie: null, csrfToken: null };
+    const html = await res.text();
+
+    // getSetCookie() returns each Set-Cookie header as its own string, avoiding
+    // the comma-folding ambiguity of get('set-cookie') for values that contain
+    // commas. Available since Node 18.14; project minimum is Node 22.
+    const setCookies = typeof res.headers.getSetCookie === 'function'
+      ? res.headers.getSetCookie()
+      : (res.headers.get('set-cookie') ?? '').split(/,(?=\s*\w+=)/).filter(Boolean);
+
+    const cookie = setCookies
+      .map(c => c.split(';')[0].trim())
+      .filter(Boolean)
+      .join('; ') || null;
+
+    // Consider embeds the CSRF token as `"csrfToken":"<value>"` inside a JSON
+    // payload in a <script> tag on the board landing page. The 8-char lower
+    // bound rules out placeholder strings and short error tokens.
+    const m = html.match(/"csrfToken"\s*:\s*"([^"]{8,})"/);
+    const csrfToken = m ? m[1] : null;
+
+    return { cookie, csrfToken };
+  } catch {
+    return { cookie: null, csrfToken: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function locationString(job) {
   if (Array.isArray(job.locations) && job.locations.length) {
     return job.locations.filter(l => typeof l === 'string').join(', ');
