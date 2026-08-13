@@ -231,6 +231,40 @@ try {
     } else {
       fail('acquireCsrfHandshake must not swallow a redirect error into a full abort');
     }
+
+    // !res.ok branch: a non-2xx response from GET /jobs (e.g. 403, 500) must
+    // degrade to null/null and still attempt the POST — the same outcome as the
+    // catch branch, but via a different code path (line 100 in consider.mjs).
+    let notOkPostHeaders = null;
+    let notOkPostCalled = false;
+    const realFetch3 = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 403,
+      headers: { getSetCookie: () => [], get: () => null },
+      text: async () => '',
+    });
+    try {
+      await consider.fetch(okEntry, {
+        fetchJson: async (_url, opts) => {
+          notOkPostCalled = true;
+          notOkPostHeaders = opts.headers;
+          return { jobs: [] };
+        },
+      });
+    } finally {
+      globalThis.fetch = realFetch3;
+    }
+    if (notOkPostCalled) {
+      pass('acquireCsrfHandshake !res.ok (403): POST still attempted (graceful degrade, not abort)');
+    } else {
+      fail('acquireCsrfHandshake !res.ok must not abort the POST');
+    }
+    if (notOkPostHeaders?.cookie == null && notOkPostHeaders?.['x-csrf-token'] == null) {
+      pass('acquireCsrfHandshake !res.ok: POST carries no cookie and no x-csrf-token (null/null degrade)');
+    } else {
+      fail(`acquireCsrfHandshake !res.ok: expected null headers, got cookie=${notOkPostHeaders?.cookie} csrf=${notOkPostHeaders?.['x-csrf-token']}`);
+    }
   }
 } catch (e) {
   fail(`consider provider tests crashed: ${e.message}`);
