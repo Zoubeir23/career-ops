@@ -87,8 +87,8 @@ try {
   else fail('consider.fetch() must throw on an unsafe host without fetching');
 
   // Malformed / empty payloads → empty array, no crash.
-  const considerEmpty = await consider.fetch(okEntry, { fetchJson: async () => ({}) });
-  const considerNoUrl = await consider.fetch(okEntry, { fetchJson: async () => ({ jobs: [{ title: 'No URL' }] }) });
+  const considerEmpty = await consider.fetch(okEntry, { _acquireHandshake: noHandshake, fetchJson: async () => ({}) });
+  const considerNoUrl = await consider.fetch(okEntry, { _acquireHandshake: noHandshake, fetchJson: async () => ({ jobs: [{ title: 'No URL' }] }) });
   if (Array.isArray(considerEmpty) && considerEmpty.length === 0 && Array.isArray(considerNoUrl) && considerNoUrl.length === 0) {
     pass('consider.fetch() tolerates malformed/empty payloads');
   } else {
