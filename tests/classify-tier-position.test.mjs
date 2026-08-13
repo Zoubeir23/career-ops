@@ -71,6 +71,35 @@ try {
 
   // Non-string input keeps its documented fallback.
   check(null, 'mid');
+
+  // ── Guard (a): associate + senior-role noun → senior ──
+  // The `associate` prefix qualifies the seniority band; it does not make the
+  // role entry-level. Direct compound and broad compound (adjective between
+  // associate and the noun) must both resolve to senior.
+  check('Associate Director, Data Science', 'senior');
+  check('Associate Creative Director', 'senior');
+  check('Associate Vice President, Technology', 'senior');
+  check('Associate Principal Scientist', 'senior');
+  check('Associate Chief Nursing Officer', 'senior');
+  check('Associate Head of Product', 'senior');
+  check('Associate Director', 'senior');
+  // Guard: associate without a senior-role noun keeps its entry classification.
+  check('Associate Software Engineer', 'entry');
+  check('Associate Developer', 'entry');
+
+  // ── Guard (b): [level marker] + [programme bridge] + [senior noun] → senior ──
+  // "Intern Program Director" manages an intern programme; it is not an
+  // internship. Guard is scoped to a closed bridge-noun set so that
+  // "Junior Staff Accountant" (staff is a senior matcher, not a bridge) is
+  // unaffected — already pinned above.
+  check('Intern Program Director', 'senior');
+  check('Internship Program Director', 'senior');
+  check('Graduate Program Director', 'senior');
+  check('Graduate Scheme Lead', 'senior');
+  check('Trainee Program Director', 'senior');
+  check('Junior Talent Director', 'senior');
+  check('Junior Talent Lead', 'senior');
+  check('Entry-Level Program Director', 'senior');
 } catch (error) {
   fail(`classify-tier.mjs tests could not run: ${error.message}`);
 }
