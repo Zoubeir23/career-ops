@@ -43,6 +43,9 @@ function toEpochMs(value) {
 
 const ENDPOINT_PATH = '/api-boards/search-jobs';
 const DEFAULT_SIZE = 500;
+// Budget for the anonymous GET that seeds the session cookie and csrfToken.
+// Shorter than the POST budget so a slow board page can't eat the full timeout.
+const HANDSHAKE_TIMEOUT_MS = 8_000;
 
 // SSRF guard. The POST target host is config-driven (built from the portals.yml
 // careers_url), so pin it to a public HTTPS origin before fetching. Consider
