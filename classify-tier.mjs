@@ -94,6 +94,33 @@ export function classifyTier(title) {
     }
   ];
 
+  // Guard (a): "Associate [*] Director/VP/Chief/Principal/Partner/Head-of" resolves
+  // to senior. The `associate` prefix qualifies the seniority band of a senior role;
+  // it does not demote it to entry-level. Works for both a direct compound
+  // ("Associate Director") and a broad one ("Associate Creative Director"). Checked
+  // before the position loop because `associate` always precedes the senior noun,
+  // so the leftmost-marker rule would fire on `associate` at index 0 and return entry.
+  const associateAt = cleanTitle.search(/\bassociate\b/i);
+  if (associateAt >= 0) {
+    const afterAssociate = cleanTitle.slice(associateAt + 'associate'.length);
+    if (/\b(director|vice\s+president|vp|principal|partner|chief|head\s+of)\b/i.test(afterAssociate)) {
+      return 'senior';
+    }
+  }
+
+  // Guard (b): [intern/entry marker] + [programme bridge noun] + [senior role noun]
+  // resolves to senior. "Intern Program Director" manages an intern programme; it is
+  // not itself an internship. The bridge-noun set is a closed list — a generic
+  // adjacency rule breaks "Junior Staff Accountant" (staff is a senior matcher but
+  // not a bridge word for this construction).
+  const programBridge = /\b(?:intern(?:ship)?|trainee|co-op|graduate|junior|entry(?:-level)?)\s+(?:program|scheme|talent|cohort)\b/i;
+  if (programBridge.test(cleanTitle)) {
+    const afterBridge = cleanTitle.replace(programBridge, ' ').trim();
+    if (/\b(chief|vp|vice\s+president|director|principal|staff|lead|senior|sr\.?|head\s+of|partner)\b/i.test(afterBridge)) {
+      return 'senior';
+    }
+  }
+
   // POSITION decides, not seniority rank. Ranking by weight meant any senior
   // word anywhere outranked an explicit programme marker, and in real titles
   // that word is usually naming the team, office or person the role sits beside
