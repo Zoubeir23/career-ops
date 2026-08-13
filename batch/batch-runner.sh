@@ -742,6 +742,38 @@ process_offer() {
   local jd_file
   jd_file="$(mktemp "${TMPDIR:-/tmp}/batch-jd-${id}.XXXXXX")"
 
+  # Pre-populate $jd_file with a static curl fetch so the worker reads HTML
+  # directly instead of always falling through to WebFetch. WebFetch is
+  # unreliable on JS-rendered boards (Phenom, Workday, iCIMS) because it hits
+  # the rendered JS shell rather than the actual JD text. curl returns the raw
+  # HTML in a single round-trip; for static boards that is exactly the JD.
+  # For JS-rendered boards the file will be thin (JS shell only), which the
+  # sufficiency check below detects — the file is then truncated to 0 bytes so
+  # the worker's Step-1 WebFetch fallback fires exactly as designed.
+  # If curl is absent or fails, $jd_file stays empty and WebFetch fires too.
+  local jd_prefetch_words=0
+  if command -v curl >/dev/null 2>&1; then
+    curl --silent --location --max-time 20 --fail --max-redirs 10 \
+      --user-agent "Mozilla/5.0 (compatible; career-ops/batch)" \
+      --output "$jd_file" \
+      -- "$url" 2>/dev/null || true
+    # Strip HTML tags and count visible words to distinguish a real JD (hundreds
+    # of words) from a JS shell (near zero visible text). Threshold: 80 words.
+    jd_prefetch_words=$(node -e "
+      const fs = require('fs');
+      try {
+        const text = fs.readFileSync(process.argv[1], 'utf-8')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        console.log(text.split(' ').filter(Boolean).length);
+      } catch (e) { console.log(0); }
+    " "$jd_file" 2>/dev/null) || jd_prefetch_words=0
+    if [[ "${jd_prefetch_words:-0}" -lt 80 ]]; then
+      : > "$jd_file"
+    fi
+  fi
+
   echo "--- Processing offer #$id: $url (report $report_num, attempt $((retries + 1)))"
 
   # Build the prompt with placeholders replaced
@@ -852,8 +884,8 @@ process_offer() {
     break
   done
 
-  # Cleanup resolved prompt
-  rm -f "$resolved_prompt"
+  # Cleanup resolved prompt and pre-fetched JD file
+  rm -f "$resolved_prompt" "$jd_file"
 
   local completed_at
   completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
