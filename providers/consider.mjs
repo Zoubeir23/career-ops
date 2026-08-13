@@ -141,12 +141,29 @@ export default {
     if (!entry.consider_board) throw new Error(`consider: ${entry.name} needs a 'consider_board' id in portals.yml`);
     const size = Number.isInteger(entry.consider_size) && entry.consider_size > 0 ? entry.consider_size : DEFAULT_SIZE;
 
+    // Perform the CSRF handshake before the POST. ctx._acquireHandshake is a
+    // test seam: set it to a stub in unit tests so no real network call is made.
+    const { cookie, csrfToken } = await (
+      typeof ctx._acquireHandshake === 'function'
+        ? ctx._acquireHandshake(origin)
+        : acquireCsrfHandshake(origin)
+    );
+
+    const csrfHeaders = {};
+    if (cookie) csrfHeaders.cookie = cookie;
+    if (csrfToken) csrfHeaders['x-csrf-token'] = csrfToken;
+
     const json = await ctx.fetchJson(origin + ENDPOINT_PATH, {
       method: 'POST',
       // redirect:'error' so a 3xx from the (config-driven) board host can't be
       // followed to a private/metadata IP — the host guard above pins the first hop.
       redirect: 'error',
-      headers: { 'content-type': 'application/json', accept: 'application/json', referer: origin + '/jobs' },
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        referer: origin + '/jobs',
+        ...csrfHeaders,
+      },
       body: JSON.stringify({
         meta: { size },
         board: { id: String(entry.consider_board), isParent: true },
