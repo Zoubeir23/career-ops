@@ -155,6 +155,83 @@ try {
   });
   if (degradedPostCalled) pass('consider.fetch() attempts the POST even when the handshake returns null');
   else fail('consider.fetch() must not skip the POST when handshake fails');
+
+  // ── Real acquireCsrfHandshake path (globalThis.fetch mock) ──────────────────
+  // The tests above stub _acquireHandshake and never exercise the actual GET
+  // /jobs logic. This test mocks globalThis.fetch so the real function runs
+  // and verifies that cookie and csrfToken extracted from the response reach
+  // the POST without going through _acquireHandshake.
+  {
+    const realFetch = globalThis.fetch;
+    let handshakeUrl = null;
+    let handshakeOpts = null;
+    let realHandshakePostHeaders = null;
+
+    globalThis.fetch = async (url, opts) => {
+      handshakeUrl = url;
+      handshakeOpts = opts;
+      return {
+        ok: true,
+        url,
+        headers: {
+          getSetCookie: () => ['session=s1; Path=/; HttpOnly', 'session.sig=sig1; Path=/'],
+          get: () => null,
+        },
+        text: async () => `<script>window.__cfg={"csrfToken":"handshake-token-ok"}</script>`,
+      };
+    };
+
+    try {
+      await consider.fetch(okEntry, {
+        // No _acquireHandshake — exercises the real acquireCsrfHandshake.
+        fetchJson: async (_url, opts) => {
+          realHandshakePostHeaders = opts.headers;
+          return { jobs: [] };
+        },
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    if (handshakeUrl === 'https://jobs.founderful.com/jobs') {
+      pass('acquireCsrfHandshake GETs {origin}/jobs');
+    } else {
+      fail(`acquireCsrfHandshake GET url = ${JSON.stringify(handshakeUrl)}`);
+    }
+    if (handshakeOpts?.redirect === 'error') {
+      pass('acquireCsrfHandshake uses redirect:"error" (SSRF guard)');
+    } else {
+      fail(`acquireCsrfHandshake redirect = ${JSON.stringify(handshakeOpts?.redirect)}`);
+    }
+    if (realHandshakePostHeaders?.cookie === 'session=s1; session.sig=sig1') {
+      pass('acquireCsrfHandshake extracts Set-Cookie and forwards it to the POST');
+    } else {
+      fail(`acquireCsrfHandshake cookie = ${JSON.stringify(realHandshakePostHeaders?.cookie)}`);
+    }
+    if (realHandshakePostHeaders?.['x-csrf-token'] === 'handshake-token-ok') {
+      pass('acquireCsrfHandshake extracts csrfToken from HTML and forwards it to the POST');
+    } else {
+      fail(`acquireCsrfHandshake x-csrf-token = ${JSON.stringify(realHandshakePostHeaders?.['x-csrf-token'])}`);
+    }
+
+    // A redirect on GET /jobs (e.g. redirect to a private IP) must cause the
+    // handshake to degrade gracefully — the POST is still attempted.
+    let redirectDegradedPostCalled = false;
+    const realFetch2 = globalThis.fetch;
+    globalThis.fetch = async () => { throw new TypeError('fetch failed'); };
+    try {
+      await consider.fetch(okEntry, {
+        fetchJson: async () => { redirectDegradedPostCalled = true; return { jobs: [] }; },
+      });
+    } finally {
+      globalThis.fetch = realFetch2;
+    }
+    if (redirectDegradedPostCalled) {
+      pass('acquireCsrfHandshake degrades gracefully on redirect (redirect:"error" throws) — POST still attempted');
+    } else {
+      fail('acquireCsrfHandshake must not swallow a redirect error into a full abort');
+    }
+  }
 } catch (e) {
   fail(`consider provider tests crashed: ${e.message}`);
 }
