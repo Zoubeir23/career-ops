@@ -1,6 +1,8 @@
 // @ts-check
 /** @typedef {import('./_types.js').Provider} Provider */
 
+import { BROWSER_LIKE_USER_AGENT } from './_http.mjs';
+
 // Consider provider — VC "talent network" portfolio boards on getconsider.com
 // (Founderful, Creandum, Balderton, Lightspeed, Notion Capital, …). The board
 // is a JS app, but its data comes from a same-origin JSON endpoint we can hit
