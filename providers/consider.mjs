@@ -83,8 +83,18 @@ async function acquireCsrfHandshake(origin) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), HANDSHAKE_TIMEOUT_MS);
   try {
+    // redirect:'error' blocks every redirect unconditionally. A redirect-to-
+    // private-IP (169.254.169.254, ::1, …) would otherwise bypass the host
+    // guard in resolveOrigin() and make a request to an internal target.
+    // redirect:'manual' cannot be used here: the WHATWG opaque-redirect
+    // response (Node ≥18 / undici) returns status 0 and empty headers, so
+    // the Location value is unreadable without implementation-specific APIs.
+    // redirect:'error' gives the same security outcome — zero redirects
+    // followed — and the catch below treats the resulting TypeError as a
+    // degraded handshake (null/null), which is correct.
     const res = await fetch(`${origin}/jobs`, {
       headers: { 'user-agent': BROWSER_LIKE_USER_AGENT, accept: 'text/html,*/*' },
+      redirect: 'error',
       signal: controller.signal,
     });
     if (!res.ok) return { cookie: null, csrfToken: null };
