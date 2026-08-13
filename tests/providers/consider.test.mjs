@@ -44,9 +44,14 @@ try {
   }
   if (considerBlocked === considerEvil.length) pass(`consider host guard rejects ${considerEvil.length} unsafe hosts (SSRF)`);
 
+  // Shared no-op stub: prevents acquireCsrfHandshake from touching the network
+  // in unit tests. Tests that verify CSRF behaviour supply their own stub below.
+  const noHandshake = async () => ({ cookie: null, csrfToken: null });
+
   // fetch() passes redirect:'error' on the happy path.
   let considerOpts = null;
   const considerJobs = await consider.fetch(okEntry, {
+    _acquireHandshake: noHandshake,
     fetchJson: async (_url, opts) => {
       considerOpts = opts;
       return { jobs: [{ title: 'AI Eng', url: 'https://jobs.founderful.com/x', companyName: 'Acme', locations: ['Remote'], timeStamp: '2026-01-02' }] };
