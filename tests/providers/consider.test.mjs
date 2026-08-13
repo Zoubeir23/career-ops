@@ -69,6 +69,7 @@ try {
   // A non-positive stamp is treated as missing, not as 1970 (which would read
   // as permanently stale to the freshness filter).
   const considerZeroStamp = await consider.fetch(okEntry, {
+    _acquireHandshake: noHandshake,
     fetchJson: async () => ({ jobs: [{ title: 'T', url: 'https://jobs.founderful.com/y', companyName: 'Acme', timeStamp: 0 }] }),
   });
   if (considerZeroStamp[0]?.postedAt == null) pass('consider.fetch() treats a 0 timeStamp as missing, not epoch 0');
