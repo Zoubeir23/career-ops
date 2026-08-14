@@ -14954,13 +14954,14 @@ try {
     .filter((e) => e.isFile() && e.name.endsWith('.mjs') && !e.name.startsWith('_'))
     .map((e) => ({ name: e.name, path: `providers/${e.name}` }));
 
-  const LOW_PACING_RE = /INTER_PAGE_DELAY_MS\s*=\s*(\d+)/g;
+  const LOW_PACING_RE = /(INTER_PAGE_DELAY_MS|PAGE_DELAY_MS)\s*=\s*(\d+)/g;
   const violators = [];
   for (const { name, path } of providerFiles) {
     const src = readFileSync(join(ROOT, path), 'utf-8');
     for (const m of src.matchAll(LOW_PACING_RE)) {
-      const ms = Number(m[1]);
-      if (ms > 0 && ms < 250) violators.push(`${name}: INTER_PAGE_DELAY_MS=${ms} (< 250 ms)`);
+      const constantName = m[1];
+      const ms = Number(m[2]);
+      if (ms < 250) violators.push(`${name}: ${constantName}=${ms} (< 250 ms)`);
     }
   }
   if (violators.length === 0) {
