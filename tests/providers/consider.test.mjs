@@ -235,15 +235,29 @@ try {
     // !res.ok branch: a non-2xx response from GET /jobs (e.g. 403, 500) must
     // degrade to null/null and still attempt the POST — the same outcome as the
     // catch branch, but via a different code path (line 100 in consider.mjs).
+    //
+    // The mock returns deceptive cookies and a csrfToken in the body. If the
+    // !res.ok guard at consider.mjs:100 is removed, acquireCsrfHandshake would
+    // proceed to scrape them and forward credentials to the POST — the
+    // "no cookie/no x-csrf-token" assertions below would then fail, making this
+    // test mutation-resistant. An empty mock (getSetCookie: () => []) would yield
+    // null/null either way and cannot distinguish the guarded path.
+    let notOkGetUrl = null;
     let notOkPostHeaders = null;
     let notOkPostCalled = false;
     const realFetch3 = globalThis.fetch;
-    globalThis.fetch = async () => ({
-      ok: false,
-      status: 403,
-      headers: { getSetCookie: () => [], get: () => null },
-      text: async () => '',
-    });
+    globalThis.fetch = async (url) => {
+      notOkGetUrl = url;
+      return {
+        ok: false,
+        status: 403,
+        headers: {
+          getSetCookie: () => ['session=s_leaked; Path=/; HttpOnly', 'session.sig=sig_leaked; Path=/'],
+          get: () => null,
+        },
+        text: async () => `<script>window.__cfg={"csrfToken":"leaked-token-403"}</script>`,
+      };
+    };
     try {
       await consider.fetch(okEntry, {
         fetchJson: async (_url, opts) => {
@@ -255,15 +269,20 @@ try {
     } finally {
       globalThis.fetch = realFetch3;
     }
+    if (notOkGetUrl === 'https://jobs.founderful.com/jobs') {
+      pass('acquireCsrfHandshake !res.ok: GET /jobs was attempted before the guard evaluated res.ok');
+    } else {
+      fail(`acquireCsrfHandshake !res.ok: expected GET https://jobs.founderful.com/jobs, got ${JSON.stringify(notOkGetUrl)}`);
+    }
     if (notOkPostCalled) {
       pass('acquireCsrfHandshake !res.ok (403): POST still attempted (graceful degrade, not abort)');
     } else {
       fail('acquireCsrfHandshake !res.ok must not abort the POST');
     }
-    if (notOkPostHeaders?.cookie == null && notOkPostHeaders?.['x-csrf-token'] == null) {
-      pass('acquireCsrfHandshake !res.ok: POST carries no cookie and no x-csrf-token (null/null degrade)');
+    if (!notOkPostHeaders?.cookie && !notOkPostHeaders?.['x-csrf-token']) {
+      pass('acquireCsrfHandshake !res.ok: POST carries no cookie and no x-csrf-token (guard blocks scraping the 403 body)');
     } else {
-      fail(`acquireCsrfHandshake !res.ok: expected null headers, got cookie=${notOkPostHeaders?.cookie} csrf=${notOkPostHeaders?.['x-csrf-token']}`);
+      fail(`acquireCsrfHandshake !res.ok: guard missing — leaked cookie=${notOkPostHeaders?.cookie} csrf=${notOkPostHeaders?.['x-csrf-token']}`);
     }
   }
 } catch (e) {
