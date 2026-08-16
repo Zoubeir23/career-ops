@@ -6,7 +6,12 @@ import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const batchStateFile = join(__dirname, 'batch', 'batch-state.tsv');
+// CAREER_OPS_BATCH_STATE overrides the batch-state.tsv path — the same override
+// merge-tracker.mjs already honours, so tests can drive this script against a
+// sandbox instead of the developer's real batch run.
+const batchStateFile = process.env.CAREER_OPS_BATCH_STATE
+  ? resolve(process.env.CAREER_OPS_BATCH_STATE)
+  : join(__dirname, 'batch', 'batch-state.tsv');
 const reportsDir = join(__dirname, 'reports');
 
 function usage() {
