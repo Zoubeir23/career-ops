@@ -62,7 +62,7 @@ const DEFAULT_MAX_PAGES = 20; // 20*100 = 2,000 postings
 // tenant is found sitting near this ceiling.
 const MAX_PAGES_CAP = 300;
 
-const PAGE_DELAY_MS = 150; // polite pacing between page requests
+const PAGE_DELAY_MS = 250; // polite pacing between page requests
 
 /** @param {import('./_types.js').PortalEntry} entry */
 export function resolveConfig(entry) {
