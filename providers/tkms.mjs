@@ -23,7 +23,7 @@
 
 const MAX_PAGES = 60; // safety cap on request count (60*20 = 1200 postings)
 const MAX_JOBS = 1000; // cap total postings pulled
-const PAGE_DELAY_MS = 150; // polite pacing between page requests
+const PAGE_DELAY_MS = 250; // polite pacing between page requests
 
 /** @param {import('./_types.js').PortalEntry} entry */
 export function resolveConfig(entry) {
