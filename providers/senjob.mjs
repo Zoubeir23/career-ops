@@ -80,6 +80,45 @@ function assertSenjobUrl(url) {
 }
 
 /**
+ * Named entities this board actually emits. A French-language listing carries
+ * accented references freely, so they are decoded rather than left as noise in
+ * a job title.
+ */
+const NAMED_ENTITIES = new Map([
+  ['nbsp', ' '], ['amp', '&'], ['quot', '"'], ['apos', "'"], ['lt', '<'], ['gt', '>'],
+  ['eacute', 'é'], ['egrave', 'è'], ['ecirc', 'ê'], ['agrave', 'à'], ['acirc', 'â'],
+  ['ccedil', 'ç'], ['ocirc', 'ô'], ['ugrave', 'ù'], ['ucirc', 'û'], ['icirc', 'î'],
+  ['iuml', 'ï'], ['euml', 'ë'], ['ouml', 'ö'], ['deg', '°'], ['hellip', '…'],
+]);
+
+const ENTITY_RE = /&(#\d{1,7}|#x[0-9a-f]{1,6}|[a-z]+);/gi;
+
+/**
+ * Decode ONE entity reference. Decoding must happen in a single pass: chained
+ * `.replace()` calls decoded `&amp;` first, so `&amp;quot;` became `&quot;` and
+ * then `"` — a double-unescape that rewrites text the board meant literally
+ * (CodeQL flagged it on #2962). An unknown reference is returned untouched
+ * rather than guessed at.
+ * @param {string} match @param {string} ref
+ */
+function decodeEntity(match, ref) {
+  if (ref[0] === '#') {
+    const code = ref[1] === 'x' || ref[1] === 'X'
+      ? Number.parseInt(ref.slice(2), 16)
+      : Number.parseInt(ref.slice(1), 10);
+    // Reject non-characters rather than emit a replacement glyph.
+    if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return match;
+    try {
+      return String.fromCodePoint(code);
+    } catch {
+      return match;
+    }
+  }
+  const named = NAMED_ENTITIES.get(ref.toLowerCase());
+  return named === undefined ? match : named;
+}
+
+/**
  * Collapse a markup fragment to its visible text.
  * Comments are stripped FIRST: the anchor bodies carry `<!-- d ico postulez -->`
  * between the title and a spacer image, and a naive tag strip would leave the
@@ -91,13 +130,7 @@ export function visibleText(fragment) {
   return String(fragment ?? '')
     .replace(/<!--[\s\S]*?-->/g, ' ')
     .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&amp;/gi, '&')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&eacute;/gi, 'é')
+    .replace(ENTITY_RE, decodeEntity)
     .replace(/\s+/g, ' ')
     .trim();
 }

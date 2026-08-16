@@ -91,6 +91,32 @@ try {
     fail(`visibleText() => ${JSON.stringify(visibleText(titleFragment))}`);
   }
 
+  // Entity decoding must be ONE pass. Decoding `&amp;` before the others turned
+  // `&amp;quot;` into `&quot;` and then into `"` — a double-unescape that
+  // rewrites text the board meant literally (CodeQL, #2962).
+  if (visibleText('&amp;quot;') === '&quot;' && visibleText('&amp;amp;') === '&amp;') {
+    pass('visibleText() decodes entities once — &amp;quot; stays literal');
+  } else {
+    fail(`double-unescape: &amp;quot; => ${JSON.stringify(visibleText('&amp;quot;'))}, &amp;amp; => ${JSON.stringify(visibleText('&amp;amp;'))}`);
+  }
+  // Guard: ordinary entities still decode, including the accented ones a
+  // French-language board actually emits, and numeric references.
+  if (visibleText('R&amp;D') === 'R&D'
+      && visibleText('&quot;Senior&quot;') === '"Senior"'
+      && visibleText('Charg&eacute; de projet') === 'Chargé de projet'
+      && visibleText('D&#233;veloppeur') === 'Développeur'
+      && visibleText('L&#39;agent') === "L'agent") {
+    pass('visibleText() still decodes named, accented and numeric entities');
+  } else {
+    fail(`entity decoding drift: ${JSON.stringify([visibleText('R&amp;D'), visibleText('&quot;Senior&quot;'), visibleText('Charg&eacute; de projet'), visibleText('D&#233;veloppeur'), visibleText("L&#39;agent")])}`);
+  }
+  // An entity the table does not know is left alone rather than mangled.
+  if (visibleText('100&euro; &unknown; net') === '100&euro; &unknown; net') {
+    pass('visibleText() leaves an unknown entity untouched');
+  } else {
+    fail(`unknown entity mangled: ${JSON.stringify(visibleText('100&euro; &unknown; net'))}`);
+  }
+
   // ── parseListingPage(): the shapes the board actually serves ──
   const jobs = parseListingPage(PAGE);
   if (jobs.length === 2) pass('parseListingPage() returns one job per posting id, sticky rows merged');
