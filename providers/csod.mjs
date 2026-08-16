@@ -30,7 +30,7 @@
 const PAGE_SIZE = 25; // server default; verified OHB serves exactly 25/page
 const MAX_PAGES = 40; // safety cap on request count (40*25 = 1000 postings)
 const MAX_JOBS = 1000; // cap total postings pulled per site
-const PAGE_DELAY_MS = 120; // polite pacing between search requests
+const PAGE_DELAY_MS = 250; // polite pacing between search requests
 
 /**
  * Parse tenant/site/corp out of a careersite URL.
