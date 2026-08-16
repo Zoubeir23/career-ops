@@ -33,7 +33,7 @@
 const PAGE_SIZE = 100; // verified: the endpoint happily serves 100+/page
 const MAX_PAGES = 40; // safety cap on request count (40*100 = 4000 postings)
 const MAX_JOBS = 1000; // cap total postings pulled (newest-first sort)
-const PAGE_DELAY_MS = 150; // polite pacing between page requests
+const PAGE_DELAY_MS = 250; // polite pacing between page requests
 
 const DESCRIPTOR = [
   'PositionID',
