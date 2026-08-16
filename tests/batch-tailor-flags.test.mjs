@@ -99,6 +99,44 @@ try {
     }
   }
 
+  // ── 3b. A numeric prefix with trailing garbage is not a number ──
+  // parseFloat stops at the first invalid character, so "4.5abc" was read as
+  // 4.5 and the run proceeded on a value the caller never wrote (CodeRabbit).
+  // Number() rejects it — but only paired with the empty-string guard below,
+  // because Number('') is 0, which is finite and would tailor everything.
+  {
+    const r = runTailor(['--min-score=4.5abc'], sandbox.file);
+    if (r.code !== 0 && !/NaN/.test(r.out)) {
+      pass('--min-score=4.5abc is rejected, not silently truncated to 4.5');
+    } else {
+      fail(`trailing garbage accepted: code=${r.code} out=${r.out.trim().slice(0, 160)}`);
+    }
+  }
+
+  // Guard: an empty or whitespace value must stay an error, not become 0.
+  {
+    const empty = runTailor(['--min-score='], sandbox.file);
+    const blank = runTailor(['--min-score= '], sandbox.file);
+    if (empty.code !== 0 && blank.code !== 0) {
+      pass('an empty or blank --min-score is an error, never a 0 threshold');
+    } else {
+      fail(`empty/blank accepted: empty=${empty.code} blank=${blank.code} ${empty.out}${blank.out}`.slice(0, 200));
+    }
+  }
+
+  // ── 3c. An unreadable state-file path is a usage error, not a stack trace ──
+  // existsSync() is true for a DIRECTORY, so readFileSync threw an uncaught
+  // EISDIR. The message must name the resolved path so an operator can see
+  // which value CAREER_OPS_BATCH_STATE actually resolved to.
+  {
+    const r = runTailor([], tmpdir());
+    if (r.code === 1 && !/at Object\.|node:fs/.test(r.out) && r.out.includes(tmpdir())) {
+      pass('an unreadable state-file path fails cleanly and names the path');
+    } else {
+      fail(`state-file failure not handled: code=${r.code} out=${r.out.trim().slice(0, 200)}`);
+    }
+  }
+
   // ── 4. --help still works ──
   {
     const r = runTailor(['--help'], sandbox.file);

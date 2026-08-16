@@ -37,7 +37,12 @@ validateFlags(args, ['--min-score', '--help', '-h'], USAGE, { valueFlags: ['--mi
 let minScore = 4.0;
 if (hasFlag(args, '--min-score')) {
   const raw = flagValue(args, '--min-score');
-  minScore = Number.parseFloat(raw);
+  // Number(), not parseFloat(): parseFloat stops at the first invalid character,
+  // so "4.5abc" silently became 4.5 and the run proceeded on a threshold the
+  // caller never wrote. The empty/whitespace guard must come FIRST — Number('')
+  // is 0, which is finite, and a 0 threshold tailors every completed job.
+  const trimmed = typeof raw === 'string' ? raw.trim() : '';
+  minScore = trimmed === '' ? NaN : Number(trimmed);
   // A NaN threshold compares false against every score, so the old code printed
   // "no roles found with score >= NaN" and exited 0 — indistinguishable from a
   // genuinely empty batch. Fail loudly instead.
@@ -52,7 +57,19 @@ if (!existsSync(batchStateFile)) {
   process.exit(1);
 }
 
-const lines = readFileSync(batchStateFile, 'utf-8').split('\n');
+// existsSync() is true for a directory and says nothing about permissions, so
+// reading can still throw (EISDIR, EACCES) — an uncaught stack trace where a
+// usage error belongs. Name the RESOLVED path: with CAREER_OPS_BATCH_STATE set,
+// the value that failed is not the one written in the source.
+let stateContent;
+try {
+  stateContent = readFileSync(batchStateFile, 'utf-8');
+} catch (err) {
+  console.error(`ERROR: cannot read batch state file at ${batchStateFile}: ${err.message}`);
+  process.exit(1);
+}
+
+const lines = stateContent.split('\n');
 const toProcess = [];
 
 for (const line of lines) {
