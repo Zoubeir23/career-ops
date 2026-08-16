@@ -23,7 +23,7 @@ import { decodeEntities } from './_html-entities.mjs';
 const ITEMS_PER_PAGE = 20; // DB's default page size
 const MAX_PAGES = 60; // safety cap on request count (60*20 = 1200 postings)
 const MAX_JOBS = 1000; // cap total postings pulled
-const PAGE_DELAY_MS = 150; // polite pacing between page requests
+const PAGE_DELAY_MS = 250; // polite pacing between page requests
 
 /** @param {string} s */
 function clean(s) {
