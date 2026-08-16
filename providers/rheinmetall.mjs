@@ -27,7 +27,7 @@ import { decodeEntities } from './_html-entities.mjs';
 
 const MAX_PAGES = 150; // safety cap (~1350 postings at 10/page); tune via entry.max_pages
 const MAX_JOBS = 1500; // cap total postings pulled
-const PAGE_DELAY_MS = 150; // polite pacing — full walks are >100 sequential requests
+const PAGE_DELAY_MS = 250; // polite pacing — full walks are >100 sequential requests
 
 /** @param {string} s */
 function clean(s) {
