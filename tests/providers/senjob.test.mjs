@@ -110,6 +110,24 @@ try {
   } else {
     fail(`entity decoding drift: ${JSON.stringify([visibleText('R&amp;D'), visibleText('&quot;Senior&quot;'), visibleText('Charg&eacute; de projet'), visibleText('D&#233;veloppeur'), visibleText("L&#39;agent")])}`);
   }
+  // A numeric reference outside the valid scalar range must stay literal.
+  // String.fromCodePoint() happily builds a LONE SURROGATE, which is not valid
+  // text and breaks strict serialization downstream (CodeRabbit, #2962).
+  if (visibleText('&#55296;') === '&#55296;'
+      && visibleText('&#xD800;') === '&#xD800;'
+      && visibleText('&#65534;') === '&#65534;'
+      && visibleText('&#xFDD0;') === '&#xFDD0;') {
+    pass('visibleText() rejects surrogates and noncharacters, leaving them literal');
+  } else {
+    fail(`invalid scalar decoded: ${JSON.stringify([visibleText('&#55296;'), visibleText('&#xD800;'), visibleText('&#65534;'), visibleText('&#xFDD0;')])}`);
+  }
+  // Guard: valid references on both sides of the rejected ranges still decode.
+  if (visibleText('&#233;') === 'é' && visibleText('&#xE9;') === 'é' && visibleText('&#128512;') === '\u{1F600}') {
+    pass('visibleText() still decodes valid decimal, hex and astral references');
+  } else {
+    fail(`valid references broken: ${JSON.stringify([visibleText('&#233;'), visibleText('&#xE9;'), visibleText('&#128512;')])}`);
+  }
+
   // An entity the table does not know is left alone rather than mangled.
   if (visibleText('100&euro; &unknown; net') === '100&euro; &unknown; net') {
     pass('visibleText() leaves an unknown entity untouched');

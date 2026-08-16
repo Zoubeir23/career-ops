@@ -97,25 +97,40 @@ const NAMED_ENTITIES = new Map([
 const ENTITY_RE = /&(#\d{1,7}|#x[0-9a-f]{1,6}|[a-z]+);/gi;
 
 /**
+ * Whether a code point is a character worth emitting.
+ *
+ * `String.fromCodePoint()` does NOT reject surrogates: `&#55296;` builds a LONE
+ * SURROGATE, which is not valid text and breaks strict serialization further
+ * down the pipeline. Noncharacters are excluded for the same reason — a job
+ * title is candidate-facing text, so an undecodable reference is better left
+ * visible than turned into a broken glyph.
+ * @param {number} code
+ */
+function isValidScalar(code) {
+  if (!Number.isInteger(code) || code <= 0 || code > 0x10ffff) return false;
+  if (code >= 0xd800 && code <= 0xdfff) return false;          // surrogate halves
+  if (code >= 0xfdd0 && code <= 0xfdef) return false;          // noncharacter block
+  if ((code & 0xfffe) === 0xfffe) return false;                // U+xFFFE / U+xFFFF
+  return true;
+}
+
+/**
  * Decode ONE entity reference. Decoding must happen in a single pass: chained
  * `.replace()` calls decoded `&amp;` first, so `&amp;quot;` became `&quot;` and
  * then `"` — a double-unescape that rewrites text the board meant literally
  * (CodeQL flagged it on #2962). An unknown reference is returned untouched
  * rather than guessed at.
- * @param {string} match @param {string} ref
+ * @param {string} match - The full entity reference, returned when it cannot be decoded.
+ * @param {string} ref - The reference body: `#233`, `#xE9`, or a named entity.
+ * @returns {string}
  */
 function decodeEntity(match, ref) {
   if (ref[0] === '#') {
     const code = ref[1] === 'x' || ref[1] === 'X'
       ? Number.parseInt(ref.slice(2), 16)
       : Number.parseInt(ref.slice(1), 10);
-    // Reject non-characters rather than emit a replacement glyph.
-    if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return match;
-    try {
-      return String.fromCodePoint(code);
-    } catch {
-      return match;
-    }
+    if (!isValidScalar(code)) return match;
+    return String.fromCodePoint(code);
   }
   const named = NAMED_ENTITIES.get(ref.toLowerCase());
   return named === undefined ? match : named;
