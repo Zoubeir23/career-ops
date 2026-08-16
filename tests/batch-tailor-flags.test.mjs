@@ -147,6 +147,20 @@ try {
     }
   }
 
+  // ── 4b. --min-score with no operand must not be swallowed by --help ──
+  // flagValue() does not consume `--help` as a value, and validateFlags handled
+  // --help before any value check — so this printed usage, exited 0, and the
+  // malformed flag was never reported (CodeRabbit on #2961). The shared helper's
+  // opt-in `requireOperand` closes it.
+  {
+    const r = runTailor(['--min-score', '--help'], sandbox.file);
+    if (r.code === 1 && /--min-score requires a value/.test(r.out)) {
+      pass('--min-score --help reports the missing operand instead of showing help');
+    } else {
+      fail(`min-score-then-help: code=${r.code} out=${r.out.trim().slice(0, 160)}`);
+    }
+  }
+
   // ── 5. The worker's mode file must not be a cwd-relative path ──
   // The state file resolved through __dirname while `modes/pdf.md` was passed
   // bare, so running the script from anywhere else handed the worker a path

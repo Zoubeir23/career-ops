@@ -32,7 +32,11 @@ const args = process.argv.slice(2);
 // typo fell through — both silently ran at the 4.0 default and spawned worker
 // runs the caller never asked for. That is the #2459 class lib/cli-flags.mjs
 // exists to end.
-validateFlags(args, ['--min-score', '--help', '-h'], USAGE, { valueFlags: ['--min-score'] });
+// requireOperand: `--min-score --help` would otherwise print usage and exit 0,
+// so the malformed flag is never reported and the numeric check below never
+// runs. This script has nothing more specific to say about a missing operand
+// than the shared message, which is exactly when opting in is right.
+validateFlags(args, ['--min-score', '--help', '-h'], USAGE, { valueFlags: ['--min-score'], requireOperand: true });
 
 let minScore = 4.0;
 if (hasFlag(args, '--min-score')) {
