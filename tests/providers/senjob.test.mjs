@@ -218,6 +218,60 @@ try {
   if (slept >= 250) pass('fetch() paces between pages of the same board');
   else fail(`fetch() slept ${slept}ms between pages`);
 
+  // ── fetch(): entry.max_pages configures the run, ctx.maxPages only caps it ──
+  // The convention alibaba.mjs and 4dayweek.mjs already follow: `max_pages` on
+  // the portals entry is the user's setting; ctx.maxPages is verify-portals'
+  // health probe passing 1. Reading only ctx.maxPages ignored the configuration.
+  {
+    const wide = new Map([
+      ['https://senjob.com/offres-d-emploi.php', PAGE],
+      ['https://senjob.com/offres-d-emploi.php?page=2', ROW_WITH_SIBLING_DATE.replace(/163401/g, '900001')],
+      ['https://senjob.com/offres-d-emploi.php?page=3', ROW_WITH_SIBLING_DATE.replace(/163401/g, '900002')],
+    ]);
+    /** @type {string[]} */
+    const asked = [];
+    const cappedCtx = {
+      sleep: async () => {},
+      fetchText: async (url) => { asked.push(url); return wide.get(url) ?? '<html>No results.</html>'; },
+    };
+    await senjob.fetch({ provider: 'senjob', max_pages: 2 }, cappedCtx);
+    if (asked.length === 2) {
+      pass('fetch() honours entry.max_pages when ctx carries no hint');
+    } else {
+      fail(`entry.max_pages ignored: requested ${JSON.stringify(asked)}`);
+    }
+
+    asked.length = 0;
+    await senjob.fetch({ provider: 'senjob', max_pages: 3 }, { ...cappedCtx, maxPages: 1 });
+    if (asked.length === 1) {
+      pass('ctx.maxPages caps entry.max_pages — a health probe still reads one page');
+    } else {
+      fail(`probe not capped: requested ${JSON.stringify(asked)}`);
+    }
+  }
+
+  // ── fetch(): the request is pinned against SSRF ──
+  // redirect:'error' plus the host check is what keeps the sweep on senjob.com;
+  // a refactor dropping either would leave the pin looking present but inert.
+  {
+    /** @type {any[]} */
+    const opts = [];
+    const optCtx = {
+      sleep: async () => {},
+      fetchText: async (url, o) => { opts.push(o); return url.includes('page=') ? '<html>No results.</html>' : PAGE; },
+    };
+    await senjob.fetch({ provider: 'senjob' }, optCtx);
+    const pinned = opts.length > 0 && opts.every((o) => o
+      && o.redirect === 'error'
+      && typeof o.headers?.['User-Agent'] === 'string'
+      && o.headers['User-Agent'].length > 0);
+    if (pinned) {
+      pass('fetch() sends redirect:error and a browser-like User-Agent on every request');
+    } else {
+      fail(`request options drift: ${JSON.stringify(opts)}`);
+    }
+  }
+
   // ── fetch(): a broken page 1 is an error, never an empty board ──
   const brokenCtx = {
     sleep: async () => {},

@@ -41,6 +41,9 @@ const LIST_URL = 'https://senjob.com/offres-d-emploi.php';
 /** Pages are ~40 postings; 10 covers the live board with room to spare. */
 const DEFAULT_MAX_PAGES = 10;
 
+/** Hard ceiling on a configured `max_pages`, so one entry cannot sweep forever. */
+const MAX_PAGES_CAP = 50;
+
 /**
  * Pacing between pages of the SAME board. senjob.com is a single small Apache
  * host, not a CDN-fronted multi-tenant ATS, so this is ordinary politeness
@@ -58,7 +61,7 @@ const POSTING_ANCHOR_RE =
 /** The machine-readable publication date, hidden next to its localized form. */
 const HIDDEN_ISO_DATE_RE = /display:\s*none;?\s*"?>\s*(\d{4}-\d{2}-\d{2})\s*</i;
 
-/** @param {string} ms @param {any} ctx */
+/** @param {any} ctx @param {number} ms */
 function sleep(ctx, ms) {
   if (typeof ctx?.sleep === 'function') return ctx.sleep(ms);
   return new Promise((r) => setTimeout(r, ms));
@@ -223,9 +226,16 @@ export default {
   },
 
   async fetch(entry, ctx) {
-    const maxPages = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0
-      ? Math.min(ctx.maxPages, DEFAULT_MAX_PAGES)
+    // `max_pages` on the portals entry is the user's setting; `ctx.maxPages` is a
+    // caller-side bound — verify-portals' health probe passes 1. Reading only the
+    // latter ignored the configuration entirely. Same shape as alibaba.mjs.
+    const entryMaxPages = Number.isInteger(entry?.max_pages) && entry.max_pages > 0
+      ? Math.min(entry.max_pages, MAX_PAGES_CAP)
       : DEFAULT_MAX_PAGES;
+    const maxPages = Math.min(
+      entryMaxPages,
+      Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0 ? ctx.maxPages : Infinity,
+    );
 
     /** @type {any[]} */
     const jobs = [];
