@@ -2,6 +2,7 @@
 
 import { readFileSync, existsSync, readdirSync } from 'fs';
 import { resolve, join } from 'path';
+import { flagValue, hasFlag, validateFlags } from './lib/cli-flags.mjs';
 import { spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
@@ -14,27 +15,35 @@ const batchStateFile = process.env.CAREER_OPS_BATCH_STATE
   : join(__dirname, 'batch', 'batch-state.tsv');
 const reportsDir = join(__dirname, 'reports');
 
-function usage() {
-  console.log(`career-ops batch tailor — bulk generate tailored CVs for high-scoring batch jobs
+const USAGE = `career-ops batch tailor — bulk generate tailored CVs for high-scoring batch jobs
 
 Usage:
-  node batch-tailor.mjs [--min-score=4.0]
+  node batch-tailor.mjs [--min-score N]
 
 Options:
-  --min-score=N   Minimum score to tailor (default: 4.0)
-`);
-  process.exit(0);
-}
+  --min-score N   Minimum score to tailor (default: 4.0). The --min-score=N form works too.
+  --help, -h      Show this help
+`;
 
 const args = process.argv.slice(2);
-if (args.includes('-h') || args.includes('--help')) {
-  usage();
-}
+
+// Route through the shared parser instead of hand-rolling it: this script used
+// to read only the `--min-score=N` form, so `--min-score 4.5` was dropped and a
+// typo fell through — both silently ran at the 4.0 default and spawned worker
+// runs the caller never asked for. That is the #2459 class lib/cli-flags.mjs
+// exists to end.
+validateFlags(args, ['--min-score', '--help', '-h'], USAGE, { valueFlags: ['--min-score'] });
 
 let minScore = 4.0;
-for (const arg of args) {
-  if (arg.startsWith('--min-score=')) {
-    minScore = parseFloat(arg.split('=')[1]);
+if (hasFlag(args, '--min-score')) {
+  const raw = flagValue(args, '--min-score');
+  minScore = Number.parseFloat(raw);
+  // A NaN threshold compares false against every score, so the old code printed
+  // "no roles found with score >= NaN" and exited 0 — indistinguishable from a
+  // genuinely empty batch. Fail loudly instead.
+  if (!Number.isFinite(minScore)) {
+    console.error(`ERROR: --min-score expects a number, got ${raw === undefined ? '(no value)' : `"${raw}"`}`);
+    process.exit(1);
   }
 }
 
@@ -88,7 +97,12 @@ for (let i = 0; i < toProcess.length; i++) {
     '-p',
     '--dangerously-skip-permissions',
     '--append-system-prompt-file',
-    'modes/pdf.md',
+    // Absolute: the state file already resolves through __dirname, so passing
+    // this one bare handed the worker a cwd-relative path that only exists when
+    // the script happens to run from the project root. modes/pdf.md is where
+    // the CV fact gate (verify-cv-facts.mjs, step 19) is instructed, so losing
+    // it silently drops the anti-fabrication check from a bulk CV run.
+    join(__dirname, 'modes', 'pdf.md'),
     prompt
   ];
   
