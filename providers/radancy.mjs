@@ -60,7 +60,7 @@ import { decodeEntities } from './_html-entities.mjs';
 
 const MAX_PAGES = 200; // safety cap (~15/page ⇒ up to ~3000 postings)
 const DEFAULT_MAX_JOBS = 2000; // default cap on total postings pulled
-const PAGE_DELAY_MS = 150; // polite pacing — full walks are >100 sequential requests
+const PAGE_DELAY_MS = 250; // polite pacing — full walks are >100 sequential requests
 
 // Page size for the JSON fragment transport. 100 is honored live by both known
 // legacy tenants (UHG, Kaiser); the HTML page hard-codes 15.
