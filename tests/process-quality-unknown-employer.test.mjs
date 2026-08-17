@@ -70,6 +70,27 @@ try {
     fail(`unattributable rows produced buckets: ${JSON.stringify(unattributable)}`);
   }
 
+  // An EMPTY company says the same thing as `?` — no employer named — so it must
+  // reach the same channel attribution instead of being dropped one line
+  // earlier (CodeRabbit, #3005). The label has to stay stable too: composing it
+  // from an empty prefix would yield " (via Hays)" with a leading space.
+  const blankCompany = aggregateProcessQuality([
+    { company: '', via: 'Hays', role: 'A', notes: '[process-friction] slow' },
+    { company: '', via: 'Hays', role: 'B', notes: 'fine' },
+    { company: '', via: 'Michael Page', role: 'C', notes: 'fine' },
+  ], 1);
+  const haysBlank = blankCompany.find((r) => /Hays/.test(r.company));
+  if (blankCompany.length === 2 && haysBlank?.totalInterviews === 2 && haysBlank?.frictionRate === 0.5) {
+    pass('an empty company with a via is attributed to its channel, not dropped');
+  } else {
+    fail(`blank company not attributed: ${JSON.stringify(blankCompany)}`);
+  }
+  if (haysBlank && haysBlank.company === '? (via Hays)') {
+    pass('an empty company gets the stable "?" label, with no leading space');
+  } else {
+    fail(`unstable label: ${JSON.stringify(haysBlank?.company)}`);
+  }
+
   // ── Guards: ordinary companies are untouched ──
   const acme = out.find((r) => r.company === 'Acme');
   if (acme && acme.totalInterviews === 1 && acme.frictionCount === 0) {

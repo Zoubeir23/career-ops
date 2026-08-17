@@ -175,7 +175,6 @@ export function aggregateProcessQuality(rows, minThreshold = 1) {
   for (const row of rows) {
     if (!row || typeof row !== 'object') continue;
     const company = companyKey(row);
-    if (!company) continue;
 
     // `?` is the documented marker for an undisclosed end employer (#1596), not
     // a company name. Grouping on it merged every unrelated employer into ONE
@@ -191,7 +190,11 @@ export function aggregateProcessQuality(rows, minThreshold = 1) {
     if (isPlaceholder(company)) {
       const via = findColumn(row, 'via').trim();
       if (!via || isPlaceholder(via)) continue;
-      label = `${company} (via ${via})`;
+      // An EMPTY cell says the same thing as `?` — no employer named — so it
+      // takes the same route. The prefix is normalized to `?` rather than kept
+      // verbatim: composing it from an empty string would label the bucket
+      // " (via Hays)", and two spellings of "unknown" would key apart.
+      label = `${company || '?'} (via ${via})`;
     }
 
     const dedupeKey = label.toLowerCase();
