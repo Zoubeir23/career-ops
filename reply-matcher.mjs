@@ -21,8 +21,38 @@ export function normalizeChinese(s) {
     .trim();
 }
 
+// A company value that carries no letter and no digit is a PLACEHOLDER, not a
+// name: `?` is the documented marker for an unknown end employer (#1596), and a
+// hand-edited row can hold the tracker's other no-data sentinels (`—`, `-`).
+// Substring-matching those turns punctuation into a company signal — and since
+// replies ask questions, `?` matched almost every mail, scoring 2, corroborating
+// partial role matches, and reaching confidence `high` next to any
+// post-application keyword.
+function isPlaceholderCompany(company) {
+  return !/[\p{L}\p{N}]/u.test(company);
+}
+
+// Short names must land on a word boundary. The normalized check further down
+// has always required more than two characters, but the two substring checks
+// above it had no floor at all, so `HP` matched the word `PHP`. A boundary
+// keeps the short names that are real — HP, 3M, IBM — while refusing the ones
+// that merely occur inside a longer word.
+const SHORT_NAME_MAX = 3;
+
+function matchesOnWordBoundary(text, company) {
+  const escaped = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'iu').test(text);
+}
+
 export function checkCompanyMatch(text, company) {
   if (!company || !text) return false;
+  if (isPlaceholderCompany(company)) return false;
+
+  // A short name is decided by the boundary test alone: falling through to the
+  // substring checks below would reinstate the very match it just refused.
+  const alphanumeric = company.replace(/[^\p{L}\p{N}]/gu, '');
+  if (alphanumeric.length <= SHORT_NAME_MAX) return matchesOnWordBoundary(text, company);
+
   // Exact substring
   if (text.includes(company)) return true;
   
