@@ -39,12 +39,19 @@ function isPlaceholderCompany(company) {
 // that merely occur inside a longer word.
 const SHORT_NAME_MAX = 3;
 
-// ...but only where a word boundary can exist. CJK and Hangul run without
+// ...but only where a word boundary can exist. Chinese and Japanese run without
 // separators, so every neighbour of a name is itself a letter and the boundary
 // NEVER holds — requiring one would refuse `腾讯` inside `我们是腾讯的招聘团队`,
 // and two-character names are the norm in those scripts. They keep the
 // substring path and the normalizeChinese() handling written for them below.
-const NO_WORD_SEPARATOR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+//
+// Hangul is deliberately NOT here. Korean orthography separates words with
+// spaces (띄어쓰기), so the boundary holds for it exactly as it does for Latin —
+// listing it would have waived the guard for no gain, letting a short Korean
+// name match inside a longer word, which is the very bug this rule exists to
+// stop. Found because the test asked for it never failed when Hangul was
+// removed (CodeRabbit, #3001).
+const NO_WORD_SEPARATOR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
 
 function matchesOnWordBoundary(text, company) {
   const escaped = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

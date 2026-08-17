@@ -85,6 +85,22 @@ try {
   // be passing because CJK matches everything.
   check('an absent Chinese name still fails',
     checkCompanyMatch('我们是阿里巴巴的招聘团队', '腾讯'), false);
+  // NO_WORD_SEPARATOR_RE lists four scripts, and 京東 above is Han despite its
+  // Japanese surroundings — so Hiragana, Katakana and Hangul were listed but
+  // never exercised, and dropping any of them would have failed no test
+  // (CodeRabbit, #3001). One short name per remaining script.
+  check('a short Hiragana name matches inside running text',
+    checkCompanyMatch('あおの採用チームです', 'あお'), true);
+  check('a short Katakana name matches inside running text',
+    checkCompanyMatch('テクの採用チームです', 'テク'), true);
+  // Korean is NOT on the substring path: 띄어쓰기 separates words, so the
+  // boundary rule applies to it as it does to Latin — it matches as a word, and
+  // is refused inside a longer one. Listing Hangul as separator-less would have
+  // waived the guard for no gain.
+  check('a Korean name matches when spaced as a word',
+    checkCompanyMatch('네이버 채용팀입니다', '네이버'), true);
+  check('...and is refused inside a longer Hangul word',
+    checkCompanyMatch('앞네이버뒤 채용팀입니다', '네이버'), false);
 
   // ── 2c. Length is counted in CODE POINTS, not UTF-16 units ──
   // `String.length` counts units, so a three-character name built from
