@@ -113,13 +113,18 @@ try {
   // A numeric reference outside the valid scalar range must stay literal.
   // String.fromCodePoint() happily builds a LONE SURROGATE, which is not valid
   // text and breaks strict serialization downstream (CodeRabbit, #2962).
+  // The policy is the shared decoder's: XML 1.0 §2.2 Char. Surrogates and
+  // U+FFFE/U+FFFF are outside it and stay literal. The FDD0–FDEF noncharacter
+  // block is INSIDE it and decodes — a deliberate consequence of naming that
+  // standard, not an oversight here, so this pins the standard's actual edge
+  // rather than a stricter rule this provider used to apply alone.
   if (visibleText('&#55296;') === '&#55296;'
       && visibleText('&#xD800;') === '&#xD800;'
       && visibleText('&#65534;') === '&#65534;'
-      && visibleText('&#xFDD0;') === '&#xFDD0;') {
-    pass('visibleText() rejects surrogates and noncharacters, leaving them literal');
+      && visibleText('&#1;') === '&#1;') {
+    pass('visibleText() rejects surrogates, U+FFFE and the C0 controls');
   } else {
-    fail(`invalid scalar decoded: ${JSON.stringify([visibleText('&#55296;'), visibleText('&#xD800;'), visibleText('&#65534;'), visibleText('&#xFDD0;')])}`);
+    fail(`invalid scalar decoded: ${JSON.stringify([visibleText('&#55296;'), visibleText('&#xD800;'), visibleText('&#65534;'), visibleText('&#1;')])}`);
   }
   // Guard: valid references on both sides of the rejected ranges still decode.
   if (visibleText('&#233;') === 'é' && visibleText('&#xE9;') === 'é' && visibleText('&#128512;') === '\u{1F600}') {
@@ -129,10 +134,12 @@ try {
   }
 
   // An entity the table does not know is left alone rather than mangled.
-  if (visibleText('100&euro; &unknown; net') === '100&euro; &unknown; net') {
+  // `&euro;` is now a KNOWN entity (the shared table carries it), so the guard
+  // uses names the table genuinely does not have.
+  if (visibleText('&unknown; &fakeent; net') === '&unknown; &fakeent; net') {
     pass('visibleText() leaves an unknown entity untouched');
   } else {
-    fail(`unknown entity mangled: ${JSON.stringify(visibleText('100&euro; &unknown; net'))}`);
+    fail(`unknown entity mangled: ${JSON.stringify(visibleText('&unknown; &fakeent; net'))}`);
   }
 
   // ── parseListingPage(): the shapes the board actually serves ──
