@@ -69,6 +69,33 @@ try {
   check('case-insensitive matching survives',
     checkCompanyMatch('bienvenue chez ACME corp', 'Acme'), true);
 
+  // ── 2b. Scripts with no word separators keep the substring path ──
+  // A word boundary can never hold in CJK: every neighbouring character is a
+  // letter, so requiring one refuses names that are plainly present. Two-
+  // character company names are the norm there (腾讯 Tencent, 京東 JD), and this
+  // file already carries normalizeChinese() for exactly that case — a short-name
+  // early return must not skip it.
+  check('a two-character Chinese name matches inside running text',
+    checkCompanyMatch('我们是腾讯的招聘团队', '腾讯'), true);
+  check('a two-character Japanese name matches after 株式会社',
+    checkCompanyMatch('株式会社京東グループより', '京東'), true);
+  check('the Chinese suffix normalisation still works',
+    checkCompanyMatch('腾讯からのご連絡', '腾讯有限公司'), true);
+  // Guard: a CJK name genuinely absent still fails, so the cases above cannot
+  // be passing because CJK matches everything.
+  check('an absent Chinese name still fails',
+    checkCompanyMatch('我们是阿里巴巴的招聘团队', '腾讯'), false);
+
+  // ── 2c. Length is counted in CODE POINTS, not UTF-16 units ──
+  // `String.length` counts units, so a three-character name built from
+  // supplementary-plane characters reports 4 and slipped past SHORT_NAME_MAX
+  // into the substring path — the same name would be boundary-checked in the
+  // BMP (CodeRabbit, #3001).
+  check('a 3-code-point astral name is treated as short, not substring-matched',
+    checkCompanyMatch('prefix𐐀BCsuffix', '𐐀BC'), false);
+  check('...and still matches when it stands as a word',
+    checkCompanyMatch('bienvenue chez 𐐀BC', '𐐀BC'), true);
+
   // ── 3. End to end: the reply must not land on the placeholder row ──
   // Both applications exist; the mail belongs to neither. Before the fix it was
   // attributed to #1 with confidence `high` on the strength of a "?".

@@ -39,6 +39,13 @@ function isPlaceholderCompany(company) {
 // that merely occur inside a longer word.
 const SHORT_NAME_MAX = 3;
 
+// ...but only where a word boundary can exist. CJK and Hangul run without
+// separators, so every neighbour of a name is itself a letter and the boundary
+// NEVER holds — requiring one would refuse `腾讯` inside `我们是腾讯的招聘团队`,
+// and two-character names are the norm in those scripts. They keep the
+// substring path and the normalizeChinese() handling written for them below.
+const NO_WORD_SEPARATOR_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
 function matchesOnWordBoundary(text, company) {
   const escaped = company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, 'iu').test(text);
@@ -50,8 +57,14 @@ export function checkCompanyMatch(text, company) {
 
   // A short name is decided by the boundary test alone: falling through to the
   // substring checks below would reinstate the very match it just refused.
+  // Length is counted in CODE POINTS — `String.length` counts UTF-16 units, so a
+  // three-character supplementary-plane name reported 4 and slipped past the
+  // threshold into the substring path its BMP equivalent was refused.
   const alphanumeric = company.replace(/[^\p{L}\p{N}]/gu, '');
-  if (alphanumeric.length <= SHORT_NAME_MAX) return matchesOnWordBoundary(text, company);
+  const isShortName = Array.from(alphanumeric).length <= SHORT_NAME_MAX;
+  if (isShortName && !NO_WORD_SEPARATOR_RE.test(company)) {
+    return matchesOnWordBoundary(text, company);
+  }
 
   // Exact substring
   if (text.includes(company)) return true;
