@@ -268,6 +268,29 @@ try {
     }
   }
 
+  // The MAX_PAGES_CAP boundary: a configured max_pages above the ceiling is
+  // clamped, so one misconfigured entry cannot sweep the board forever
+  // (Scott-Emberson, code owner for tests/, on #2962). Every page below yields a
+  // NEW posting, so nothing but the cap can stop the run.
+  {
+    /** @type {string[]} */
+    const asked = [];
+    const endlessCtx = {
+      sleep: async () => {},
+      fetchText: async (url) => {
+        asked.push(url);
+        const page = Number(new URL(url).searchParams.get('page') || '1');
+        return ROW_WITH_SIBLING_DATE.replace(/163401/g, String(800000 + page));
+      },
+    };
+    await senjob.fetch({ provider: 'senjob', max_pages: 999 }, endlessCtx);
+    if (asked.length === 50) {
+      pass('fetch() clamps an over-large max_pages to the 50-page cap');
+    } else {
+      fail(`MAX_PAGES_CAP not enforced: requested ${asked.length} pages`);
+    }
+  }
+
   // ── fetch(): the request is pinned against SSRF ──
   // redirect:'error' plus the host check is what keeps the sweep on senjob.com;
   // a refactor dropping either would leave the pin looking present but inert.
