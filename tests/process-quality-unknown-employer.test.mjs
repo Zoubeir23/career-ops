@@ -91,6 +91,24 @@ try {
     fail(`unstable label: ${JSON.stringify(haysBlank?.company)}`);
   }
 
+  // EVERY placeholder spelling must collapse to the same bucket. isPlaceholder
+  // accepts `?`, `—`, `-` and an empty cell, so normalizing only the empty one
+  // left `— (via Hays)` keyed apart from `? (via Hays)` — splitting one
+  // channel's totals, which is this PR's own bug in miniature (CodeRabbit,
+  // #3005).
+  const mixedMarkers = aggregateProcessQuality([
+    { company: '?', via: 'Hays', role: 'A', notes: '[process-friction] slow' },
+    { company: '—', via: 'Hays', role: 'B', notes: 'fine' },
+    { company: '-', via: 'Hays', role: 'C', notes: 'fine' },
+    { company: '', via: 'Hays', role: 'D', notes: 'fine' },
+  ], 1);
+  if (mixedMarkers.length === 1 && mixedMarkers[0].company === '? (via Hays)'
+      && mixedMarkers[0].totalInterviews === 4 && mixedMarkers[0].frictionRate === 0.25) {
+    pass('every placeholder spelling collapses into one bucket per channel');
+  } else {
+    fail(`markers split the channel: ${JSON.stringify(mixedMarkers)}`);
+  }
+
   // ── Guards: ordinary companies are untouched ──
   const acme = out.find((r) => r.company === 'Acme');
   if (acme && acme.totalInterviews === 1 && acme.frictionCount === 0) {

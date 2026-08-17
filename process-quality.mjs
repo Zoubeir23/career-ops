@@ -190,11 +190,12 @@ export function aggregateProcessQuality(rows, minThreshold = 1) {
     if (isPlaceholder(company)) {
       const via = findColumn(row, 'via').trim();
       if (!via || isPlaceholder(via)) continue;
-      // An EMPTY cell says the same thing as `?` — no employer named — so it
-      // takes the same route. The prefix is normalized to `?` rather than kept
-      // verbatim: composing it from an empty string would label the bucket
-      // " (via Hays)", and two spellings of "unknown" would key apart.
-      label = `${company || '?'} (via ${via})`;
+      // The prefix is ALWAYS `?`, never the cell's own spelling. isPlaceholder
+      // accepts `?`, `—`, `-` and an empty cell, and every one of them means the
+      // same thing — but keeping them verbatim keys `— (via Hays)` apart from
+      // `? (via Hays)`, splitting one channel's totals. That is this function's
+      // own bug in miniature, so it gets the same answer: normalize, then group.
+      label = `? (via ${via})`;
     }
 
     const dedupeKey = label.toLowerCase();
