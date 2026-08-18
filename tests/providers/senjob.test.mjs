@@ -118,13 +118,22 @@ try {
   // block is INSIDE it and decodes — a deliberate consequence of naming that
   // standard, not an oversight here, so this pins the standard's actual edge
   // rather than a stricter rule this provider used to apply alone.
-  if (visibleText('&#55296;') === '&#55296;'
-      && visibleText('&#xD800;') === '&#xD800;'
-      && visibleText('&#65534;') === '&#65534;'
-      && visibleText('&#1;') === '&#1;') {
-    pass('visibleText() rejects surrogates, U+FFFE and the C0 controls');
+  const outsideXmlChar = ['&#55296;', '&#xD800;', '&#65534;', '&#65535;', '&#1;'];
+  const keptLiteral = outsideXmlChar.filter((ref) => visibleText(ref) === ref);
+  if (keptLiteral.length === outsideXmlChar.length) {
+    pass('visibleText() keeps surrogates, U+FFFE, U+FFFF and the C0 controls literal');
   } else {
-    fail(`invalid scalar decoded: ${JSON.stringify([visibleText('&#55296;'), visibleText('&#xD800;'), visibleText('&#65534;'), visibleText('&#1;')])}`);
+    fail(`decoded outside XML Char: ${JSON.stringify(outsideXmlChar.filter((r) => !keptLiteral.includes(r)).map((r) => [r, visibleText(r)]))}`);
+  }
+  // The other side of the same boundary, which the comment above claims and the
+  // assertion above cannot show: U+FDD0 is INSIDE XML Char and therefore
+  // decodes. Without this, a decoder that rejected the whole FDD0–FDEF block —
+  // the stricter rule senjob used to apply alone — would still pass (CodeRabbit,
+  // #3007).
+  if (visibleText('&#64976;') === '\uFDD0') {
+    pass('visibleText() decodes U+FDD0: inside XML Char, so inside the policy');
+  } else {
+    fail(`U+FDD0 not decoded: ${JSON.stringify(visibleText('&#64976;'))}`);
   }
   // Guard: valid references on both sides of the rejected ranges still decode.
   if (visibleText('&#233;') === 'é' && visibleText('&#xE9;') === 'é' && visibleText('&#128512;') === '\u{1F600}') {
