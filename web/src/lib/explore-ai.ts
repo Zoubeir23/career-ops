@@ -97,8 +97,10 @@ export function makeAiStreamParser(opts?: { knownUrls?: Set<string> }) {
           continue;
         }
         const key = canon(offer.url);
-        if (seen.has(key) || known.has(key)) continue; // intra-run + known dedup
-        seen.add(key);
+        // '' means NO KEY (an unparseable-but-regex-passing url) — never treat
+        // two such offers as duplicates of EACH OTHER just because both are ''.
+        if (key && (seen.has(key) || known.has(key))) continue; // intra-run + known dedup
+        if (key) seen.add(key);
         out.push({ kind: "offer", offer });
       }
       return out;
