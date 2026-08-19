@@ -61,6 +61,16 @@ test("the date handed to appendToScanHistory comes from localToday()", () => {
     /const\s+date\s*=\s*localToday\(\)\s*;/,
     `${SRC}: expected \`const date = localToday();\` in the child-process snippet.`,
   );
+  // The assertion above only proves `date` is ASSIGNED from localToday() — not
+  // that the call site actually passes it on. A rename at the call (e.g. back
+  // to an inline `new Date()...`, or a stray second variable) would leave the
+  // `date` assignment unused and this bug's actual symptom would resurface.
+  assert.match(
+    code,
+    /appendToScanHistory\(\s*offers\s*,\s*date\s*,\s*["']added["']\s*\)/,
+    `${SRC}: expected appendToScanHistory(offers, date, "added") — the local-day ` +
+      `value must reach the writer, not just get computed and discarded.`,
+  );
 });
 
 test("localToday is imported into the spawned child from lib/local-today.mjs", () => {
