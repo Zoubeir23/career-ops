@@ -55,3 +55,24 @@ test("knownUrls filters an already-seen posting by its exact gh_jid, not by host
   assert.equal(offers.length, 1, "a genuinely new posting at the same host+path was filtered as if already known");
   assert.equal(offers[0].offer.url, differentJob);
 });
+
+test("two scheme-valid but URL-unparseable offers BOTH survive — an empty key must not dedup against itself", () => {
+  // Both pass toOffer()'s /^https?:\/\// gate (so they reach canon()) but throw
+  // in `new URL(...)`, so canon() returns '' for each. Without the `key &&`
+  // guard, the second offer's '' would match the first's '' in `seen` and get
+  // silently dropped — two UNRELATED malformed entries treated as duplicates
+  // of each other purely because neither could be keyed.
+  const parser = makeAiStreamParser();
+  const unparseableA = "https://[bad";
+  const unparseableB = "http:// space.example.com";
+  assert.equal(canon(unparseableA), "", "test premise: A must canonicalize to the empty key");
+  assert.equal(canon(unparseableB), "", "test premise: B must canonicalize to the empty key");
+  const chunks = [
+    ...parser.feed(envelope({ url: unparseableA, company: "Acme", title: "Role A" })),
+    ...parser.feed(envelope({ url: unparseableB, company: "Acme", title: "Role B" })),
+  ];
+  const offers = chunks.filter((c) => c.kind === "offer");
+  assert.equal(offers.length, 2, "an empty canonical key deduped against another empty key");
+  assert.equal(offers[0].offer.url, unparseableA);
+  assert.equal(offers[1].offer.url, unparseableB);
+});

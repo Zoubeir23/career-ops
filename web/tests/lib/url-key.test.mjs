@@ -34,6 +34,18 @@ test("web mirror strips the same tracking-param denylist as core, in the same so
   assert.equal(webKey(url), coreKey(url));
 });
 
+test("two RETAINED (non-tracking) params in opposite input order sort to the same key, on both sides", () => {
+  // A single retained param (the test above) never exercises keep.sort() —
+  // there is nothing to order. This pins order-independence with two.
+  const orderA = "https://boards.greenhouse.io/acme/jobs/apply?location=paris&gh_jid=4471829005&utm_source=li";
+  const orderB = "https://boards.greenhouse.io/acme/jobs/apply?utm_source=li&gh_jid=4471829005&location=paris";
+  const expected = "https://boards.greenhouse.io/acme/jobs/apply?gh_jid=4471829005&location=paris";
+  assert.equal(webKey(orderA), expected);
+  assert.equal(webKey(orderB), expected, "opposite input order must sort to the identical key");
+  assert.equal(webKey(orderA), coreKey(orderA));
+  assert.equal(webKey(orderB), coreKey(orderB));
+});
+
 test("the reported bug: two DIFFERENT Greenhouse postings (same host+path, distinct gh_jid) key DIFFERENTLY", () => {
   const jobA = "https://boards.greenhouse.io/acme/jobs/apply?gh_jid=4471829005";
   const jobB = "https://boards.greenhouse.io/acme/jobs/apply?gh_jid=5501203417";
