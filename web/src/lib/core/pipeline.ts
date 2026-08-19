@@ -51,7 +51,10 @@ process.stdin.on("data", (d) => { input += d; });
 process.stdin.on("end", async () => {
   try {
     const offers = JSON.parse(input);
-    const date = new Date().toISOString().slice(0, 10);
+    // LOCAL calendar day, not the UTC one — west of Greenwich, an evening
+    // add would otherwise stamp scan-history.tsv's first_seen a day ahead,
+    // opening scan.mjs's recheck/cooldown gate a day late for this row (#3070).
+    const date = localToday();
     await appendToPipeline(offers);
     await appendToScanHistory(offers, date, "added");
     process.stdout.write(JSON.stringify({ added: offers.length }));
