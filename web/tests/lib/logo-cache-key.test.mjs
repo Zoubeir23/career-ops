@@ -45,17 +45,19 @@ test("keys are filesystem-safe and cannot escape the cache directory", () => {
   // makes this file binary to grep and every future search of it silently
   // returns nothing (tests/source-no-nul-bytes.test.mjs).
   //
-  // The prefix allows Unicode letters/numbers (\p{L}\p{N}), not [a-z0-9] only
-  // — normalizeTextKey KEEPS non-ASCII letters on purpose (the collision fix
-  // below), so a real accented/CJK company name legitimately produces a
-  // Unicode prefix. Safety here doesn't come from ASCII-only output; it comes
-  // from \p{L}\p{N} excluding every traversal/separator/control character
-  // (`.`, `/`, `\`, space, NUL) regardless of script.
-  const hostile =["../../etc/passwd", "..\\..\\windows\\system32", "a/b/c", "x y", "x\u0000y", "café/../../root"];
+  // The prefix allows Unicode letters/marks/numbers (\p{L}\p{M}\p{N}), not
+  // [a-z0-9] only — normalizeTextKey KEEPS non-ASCII letters AND combining
+  // marks on purpose (the collision fix below; a Devanagari name like कंपनी
+  // is letters plus marks, not letters alone, so \p{M} must be included or a
+  // legitimate name is rejected as "unsafe"). Safety here doesn't come from
+  // ASCII-only output; it comes from \p{L}\p{M}\p{N} excluding every
+  // traversal/separator/control character (`.`, `/`, `\`, space, NUL)
+  // regardless of script.
+  const hostile =["../../etc/passwd", "..\\..\\windows\\system32", "a/b/c", "x y", "x\u0000y", "café/../../root", "कंपनी/../../root"];
   for (const name of hostile) {
     const key = companyCacheKey(name);
     if (key === null) continue;
-    assert.match(key, /^co_v\d+_[\p{L}\p{N}]{1,40}_[0-9a-f]{10}$/u, `unsafe key for ${JSON.stringify(name)}: ${key}`);
+    assert.match(key, /^co_v\d+_[\p{L}\p{M}\p{N}]{1,40}_[0-9a-f]{10}$/u, `unsafe key for ${JSON.stringify(name)}: ${key}`);
   }
 });
 
