@@ -44,11 +44,18 @@ test("keys are filesystem-safe and cannot escape the cache directory", () => {
   // component. The NUL case is written as an escape, never embedded: a raw NUL
   // makes this file binary to grep and every future search of it silently
   // returns nothing (tests/source-no-nul-bytes.test.mjs).
-  const hostile = ["../../etc/passwd", "..\\..\\windows\\system32", "a/b/c", "x y", "x\u0000y", "café/../../root"];
+  //
+  // The prefix allows Unicode letters/numbers (\p{L}\p{N}), not [a-z0-9] only
+  // — normalizeTextKey KEEPS non-ASCII letters on purpose (the collision fix
+  // below), so a real accented/CJK company name legitimately produces a
+  // Unicode prefix. Safety here doesn't come from ASCII-only output; it comes
+  // from \p{L}\p{N} excluding every traversal/separator/control character
+  // (`.`, `/`, `\`, space, NUL) regardless of script.
+  const hostile =["../../etc/passwd", "..\\..\\windows\\system32", "a/b/c", "x y", "x\u0000y", "café/../../root"];
   for (const name of hostile) {
     const key = companyCacheKey(name);
     if (key === null) continue;
-    assert.match(key, /^co_v\d+_[a-z0-9]{1,40}_[0-9a-f]{10}$/, `unsafe key for ${JSON.stringify(name)}: ${key}`);
+    assert.match(key, /^co_v\d+_[\p{L}\p{N}]{1,40}_[0-9a-f]{10}$/u, `unsafe key for ${JSON.stringify(name)}: ${key}`);
   }
 });
 
@@ -64,4 +71,27 @@ test("bumping the version changes every key", () => {
   const key = companyCacheKey("Notion");
   assert.ok(!key.includes("_v0_"), "keys must not carry a stale version token");
   assert.equal(key.split("_")[1], COMPANY_KEY_VERSION);
+});
+
+test("Škoda and Koda do not collide (the [^a-z0-9] regression this fix stops)", () => {
+  // Pre-fix: both stripped to "koda" and hashed identically — one company
+  // silently wore the other's logo forever, with no expiry to correct it
+  // (requirement 2 in this file's own header).
+  assert.notEqual(companyCacheKey("Škoda"), companyCacheKey("Koda"));
+});
+
+test("Zürich Re and a plain-ASCII near-miss do not collide", () => {
+  assert.notEqual(companyCacheKey("Zürich Re"), companyCacheKey("Zurich Re"));
+});
+
+test("CJK company names are cacheable, not rejected as empty", () => {
+  // Pre-fix: [^a-z0-9] erased CJK entirely, so companyCacheKey returned null
+  // and the name was never cached — silently ineligible, not merely slower.
+  const key = companyCacheKey("日本電産");
+  assert.notEqual(key, null);
+  assert.match(key, /^co_v\d+_日本電産_[0-9a-f]{10}$/);
+});
+
+test("two distinct CJK companies get distinct keys", () => {
+  assert.notEqual(companyCacheKey("日本電産"), companyCacheKey("本田技研工業"));
 });
