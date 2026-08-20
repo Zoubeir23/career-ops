@@ -79,11 +79,22 @@ test("Škoda and Koda do not collide (the [^a-z0-9] regression this fix stops)",
   // Pre-fix: both stripped to "koda" and hashed identically — one company
   // silently wore the other's logo forever, with no expiry to correct it
   // (requirement 2 in this file's own header).
-  assert.notEqual(companyCacheKey("Škoda"), companyCacheKey("Koda"));
+  const a = companyCacheKey("Škoda");
+  const b = companyCacheKey("Koda");
+  // notEqual(null, "key") also passes, which would hide a DIFFERENT
+  // regression — one side wrongly becoming uncacheable — as if it were this
+  // test's collision guarantee holding. Both sides must be real keys first.
+  assert.notEqual(a, null);
+  assert.notEqual(b, null);
+  assert.notEqual(a, b);
 });
 
 test("Zürich Re and a plain-ASCII near-miss do not collide", () => {
-  assert.notEqual(companyCacheKey("Zürich Re"), companyCacheKey("Zurich Re"));
+  const a = companyCacheKey("Zürich Re");
+  const b = companyCacheKey("Zurich Re");
+  assert.notEqual(a, null);
+  assert.notEqual(b, null);
+  assert.notEqual(a, b);
 });
 
 test("CJK company names are cacheable, not rejected as empty", () => {
@@ -95,7 +106,11 @@ test("CJK company names are cacheable, not rejected as empty", () => {
 });
 
 test("two distinct CJK companies get distinct keys", () => {
-  assert.notEqual(companyCacheKey("日本電産"), companyCacheKey("本田技研工業"));
+  const a = companyCacheKey("日本電産");
+  const b = companyCacheKey("本田技研工業");
+  assert.notEqual(a, null);
+  assert.notEqual(b, null);
+  assert.notEqual(a, b);
 });
 
 test("a non-BMP letter landing on the 40-char truncation boundary does not split its surrogate pair", () => {
