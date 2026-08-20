@@ -81,8 +81,19 @@ export async function withTrackerLock<T>(trackerFile: string, fn: () => T | Prom
       retryMs: 50,
       tracker: trackerFile,
     });
-  } catch {
-    throw new TrackerBusyError();
+  } catch (e) {
+    // The core tags ONLY the genuine-contention timeout with code LOCK_TIMEOUT
+    // (tracker-utils.mjs's own comment: "so callers can tell 'lock is busy,
+    // retry later' apart from filesystem/configuration failures rethrown out
+    // of the loop above"). A bare catch here converted EVERY error — ENOENT
+    // from a missing lock-dir parent, EACCES, a broken checkout — into
+    // "tracker is being written by another process, retry", which is false:
+    // those never resolve by retrying. Anything not tagged propagates as-is.
+    const err = e as { code?: string } | null;
+    if (err && err.code === "LOCK_TIMEOUT") {
+      throw new TrackerBusyError();
+    }
+    throw e;
   }
   try {
     return await fn();
