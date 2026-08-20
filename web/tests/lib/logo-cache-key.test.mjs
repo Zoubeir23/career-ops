@@ -97,3 +97,24 @@ test("CJK company names are cacheable, not rejected as empty", () => {
 test("two distinct CJK companies get distinct keys", () => {
   assert.notEqual(companyCacheKey("日本電産"), companyCacheKey("本田技研工業"));
 });
+
+test("a non-BMP letter landing on the 40-char truncation boundary does not split its surrogate pair", () => {
+  // CJK Extension B is astral-plane (surrogate pair in UTF-16), and real Han
+  // characters live there. String.prototype.slice(0, 40) counts UTF-16 code
+  // UNITS, so it can cut a pair in half and leave a lone surrogate — an
+  // invalid string, not a printable one. Built to land exactly on the
+  // boundary: 39 ASCII letters, then the astral letter at position 40.
+  const astralLetter = "\u{20000}"; // 𠀀 — CJK Extension B, \p{L}
+  const name = "a".repeat(39) + astralLetter + "trailing text past the cut";
+  const key = companyCacheKey(name);
+  assert.notEqual(key, null);
+  // A lone (unpaired) surrogate anywhere in the key means the pair was split.
+  assert.doesNotMatch(
+    key,
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/,
+    `key contains an unpaired surrogate: ${JSON.stringify(key)}`,
+  );
+  // The astral letter must survive whole, not be silently dropped either.
+  assert.ok(key.includes(astralLetter), `astral letter was lost, not just split: ${JSON.stringify(key)}`);
+  assert.match(key, /^co_v\d+_[\p{L}\p{M}\p{N}]{1,40}_[0-9a-f]{10}$/u);
+});

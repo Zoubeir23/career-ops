@@ -41,9 +41,22 @@ export const COMPANY_KEY_VERSION = "v3";
  *  same key just because an ASCII-only filter would erase what distinguished
  *  them. See normalize-text-key.mjs's own header for the historical bug this
  *  reintroduces if reverted. */
+/** Truncate to at most `n` Unicode CODE POINTS, not UTF-16 code units.
+ *  `String.prototype.slice` counts code units, so it can land mid-surrogate-
+ *  pair for a non-BMP letter (real: rarer Han characters live in the CJK
+ *  Extension blocks, astral-plane code points) — cutting the pair leaves a
+ *  lone surrogate in the key, an invalid UTF-16 string. Spreading a string
+ *  iterates by code point, so the pair is always kept or dropped whole. */
+function truncateCodePoints(s, n) {
+  return [...s].slice(0, n).join("");
+}
+
 export function companyCacheKey(company) {
   const normalized = normalizeTextKey(company);
   if (!normalized) return null;
+  // The digest covers the FULL normalized name (never truncated), so
+  // collision-safety never depended on the prefix — only the prefix's own
+  // validity as a string does.
   const digest = createHash("sha256").update(normalized).digest("hex").slice(0, 10);
-  return `co_${COMPANY_KEY_VERSION}_${normalized.slice(0, 40)}_${digest}`;
+  return `co_${COMPANY_KEY_VERSION}_${truncateCodePoints(normalized, 40)}_${digest}`;
 }
