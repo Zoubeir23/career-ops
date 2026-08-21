@@ -4,7 +4,7 @@ Career-Ops scans job sources through provider modules in `providers/`. Each
 non-helper `*.mjs` file maps to one supported source. Files prefixed with `_`
 are shared helpers and are not loaded as providers.
 
-| Board | Type (API / RSS / parser) | Notes |
+| Board | Type (API / Atom / RSS / parser) | Notes |
 | --- | --- | --- |
 | 4 Day Week | API | Reads the public `https://4dayweek.io/api/jobs` JSON feed (4-day-week / reduced-hours roles). Configure with `provider: 4dayweek`; paginates `?page=N` up to `max_pages` (default 3), drops expired postings, then scanner filters apply. |
 | a16z speedrun talent network | API | Board-wide aggregator for the a16z speedrun + wider a16z portfolio (~200 startups). Auto-detects `speedrun-talent-network.com` URLs and reads the public zero-auth `/api/v1/jobs` JSON feed (OpenAPI at `/api/v1/openapi.json`); paginates `?page=N` (0-indexed) up to `max_pages` (default 3). Optional `q:` (or `keywords:`) runs the feed's server-side full-text search with synonym expansion. Unannounced roles arrive pre-masked as "Stealth". Operated by the a16z speedrun program's talent team (provenance: the site links a16z.com's privacy/terms/disclosures; owner contact jmazer@a16z.com). Configure with `provider: a16z-speedrun-talent`. |
