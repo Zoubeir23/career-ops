@@ -89,6 +89,84 @@ try {
   } else {
     fail('cleanUrl() should return "" for empty/non-string/unparseable input');
   }
+
+  // ── normalizeJob — fixture shaped from a real record captured 2026-08-21
+  // from the live public search API. ──
+  const sampleRecord = {
+    metadata: {
+      jobPostId: 'MCF-2026-1458520',
+      newPostingDate: '2026-08-21',
+      jobDetailsUrl: 'https://www.mycareersfuture.gov.sg/job/building-construction/site-supervisor-woh-hup-engineering-dbac8e747e21f520170b3a66a019480c',
+    },
+    address: {
+      districts: [{ location: 'Islandwide' }],
+    },
+    postedCompany: { name: 'WOH HUP ENGINEERING PTE. LTD.' },
+    hiringCompany: null,
+    title: 'Site Supervisor',
+  };
+  const normalized = normalizeJob(sampleRecord);
+  if (
+    normalized
+    && normalized.title === 'Site Supervisor'
+    && normalized.url === sampleRecord.metadata.jobDetailsUrl
+    && normalized.company === 'WOH HUP ENGINEERING PTE. LTD.'
+    && normalized.location === 'Islandwide'
+    && normalized.postedAt === Date.parse('2026-08-21')
+    && normalized.id === 'MCF-2026-1458520'
+  ) {
+    pass('normalizeJob() maps a real-shaped record to title/url/company/location/postedAt/id');
+  } else {
+    fail(`normalizeJob(sample) = ${JSON.stringify(normalized)}`);
+  }
+
+  // hiringCompany (the real employer on an agency-posted listing) wins over
+  // postedCompany (the agency) when both are present.
+  const onBehalfRecord = {
+    ...sampleRecord,
+    postedCompany: { name: 'RECRUIT EXPERT PTE. LTD.' },
+    hiringCompany: { name: 'Real Employer Pte Ltd' },
+  };
+  if (normalizeJob(onBehalfRecord)?.company === 'Real Employer Pte Ltd') {
+    pass('normalizeJob() prefers hiringCompany over postedCompany when both are present');
+  } else {
+    fail(`normalizeJob(onBehalf).company = ${JSON.stringify(normalizeJob(onBehalfRecord)?.company)}`);
+  }
+
+  // Multiple districts join into one location string.
+  const multiDistrictRecord = {
+    ...sampleRecord,
+    address: { districts: [{ location: 'D01 Marina' }, { location: 'D02 Tanjong Pagar' }] },
+  };
+  if (normalizeJob(multiDistrictRecord)?.location === 'D01 Marina, D02 Tanjong Pagar') {
+    pass('normalizeJob() joins multiple districts into one comma-separated location');
+  } else {
+    fail(`normalizeJob(multiDistrict).location = ${JSON.stringify(normalizeJob(multiDistrictRecord)?.location)}`);
+  }
+
+  // Missing id / title / trusted url each drop the record.
+  if (normalizeJob({ ...sampleRecord, metadata: { ...sampleRecord.metadata, jobPostId: undefined } }) === null) {
+    pass('normalizeJob() returns null when jobPostId is missing');
+  } else {
+    fail('normalizeJob() should return null when jobPostId is missing');
+  }
+  if (normalizeJob({ ...sampleRecord, title: '' }) === null) {
+    pass('normalizeJob() returns null when title is blank');
+  } else {
+    fail('normalizeJob() should return null when title is blank');
+  }
+  if (normalizeJob({ ...sampleRecord, metadata: { ...sampleRecord.metadata, jobDetailsUrl: 'https://evil.example.com/job/1' } }) === null) {
+    pass('normalizeJob() returns null when jobDetailsUrl is off-host');
+  } else {
+    fail('normalizeJob() should return null when jobDetailsUrl is off-host');
+  }
+
+  // No districts / empty array → empty location, not a crash.
+  if (normalizeJob({ ...sampleRecord, address: {} })?.location === '') {
+    pass('normalizeJob() tolerates a missing address/districts, returning an empty location');
+  } else {
+    fail(`normalizeJob(no address).location = ${JSON.stringify(normalizeJob({ ...sampleRecord, address: {} })?.location)}`);
+  }
 } catch (e) {
   fail(`mycareersfuture provider tests crashed: ${e.message}`);
 }
