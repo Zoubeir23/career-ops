@@ -102,3 +102,16 @@ test("a completed field's own string value may contain a literal unmatched brace
   assert.deepEqual(obj, { about_you: { value: "I use patterns like {config here", needs_confirmation: false } });
   assert.equal(wasTruncated, true);
 });
+
+test("an incomplete trailing field must be OMITTED, never fabricated from a partial nested value", () => {
+  // "b"'s own value object only has "value" so far — "needs_confirmation"
+  // never arrived. A backtrack point INSIDE "b" (the comma between its two
+  // properties) is not a field boundary; accepting it would close "b" early
+  // and hand back {"value": "x"} as if that were the planner's complete
+  // answer, when it silently dropped content mid-field. The caller has no
+  // way to distinguish that from a genuinely short but complete answer, so
+  // omitting the field entirely is the only safe outcome.
+  const { obj, truncated } = extractJsonObject('{"a":1,"b":{"value":"x","needs_confirmation":');
+  assert.deepEqual(obj, { a: 1 }, "the incomplete 'b' field must not appear at all, fabricated or otherwise");
+  assert.equal(truncated, true);
+});
