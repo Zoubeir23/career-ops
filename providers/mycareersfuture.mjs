@@ -67,7 +67,9 @@ export function parseConfig(entry) {
   return {
     keywords,
     size: intInRange(cfg.size, MAX_PAGE_SIZE, 1, MAX_PAGE_SIZE),
-    maxPages: Math.min(intInRange(entry && entry.max_pages, DEFAULT_MAX_PAGES, 1, MAX_PAGES_CAP), MAX_PAGES_CAP),
+    // intInRange's own `max` argument already enforces MAX_PAGES_CAP — no
+    // separate Math.min needed on top of it.
+    maxPages: intInRange(entry && entry.max_pages, DEFAULT_MAX_PAGES, 1, MAX_PAGES_CAP),
   };
 }
 
