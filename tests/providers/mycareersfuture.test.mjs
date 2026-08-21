@@ -2,6 +2,8 @@
 import { pass, fail, ROOT } from '../helpers.mjs';
 import { join } from 'path';
 import { pathToFileURL } from 'url';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 
 console.log('\nProvider — mycareersfuture');
 
@@ -166,6 +168,60 @@ try {
     pass('normalizeJob() tolerates a missing address/districts, returning an empty location');
   } else {
     fail(`normalizeJob(no address).location = ${JSON.stringify(normalizeJob({ ...sampleRecord, address: {} })?.location)}`);
+  }
+
+  // ── fetch(): keyword requirement + config/profile.yml fallback. Runs in an
+  // isolated tmp cwd (never this checkout's own config/profile.yml, so the
+  // test is hermetic regardless of whether the checkout is onboarded) —
+  // same pattern as tests/providers/jobbankca.test.mjs. ──
+  {
+    const withTmpCwd = async (setup, run) => {
+      const tmp = mkdtempSync(join(tmpdir(), 'career-ops-mycareersfuture-fallback-'));
+      const cwdBefore = process.cwd();
+      try {
+        setup(tmp);
+        process.chdir(tmp);
+        return await run();
+      } finally {
+        process.chdir(cwdBefore);
+      }
+    };
+
+    // No entry keywords, but a profile.yml with target_roles → falls back.
+    let sentSearch = null;
+    await withTmpCwd(
+      (tmp) => {
+        mkdirSync(join(tmp, 'config'));
+        writeFileSync(join(tmp, 'config', 'profile.yml'), 'target_roles:\n  primary:\n    - Data Engineer\n');
+      },
+      () => mycareersfuture.fetch(
+        { provider: 'mycareersfuture', name: 'No own keywords' },
+        { fetchJson: async (url, opts) => { sentSearch = JSON.parse(opts.body).search; return { results: [] }; } },
+      ),
+    );
+    if (sentSearch === 'Data Engineer') {
+      pass('mycareersfuture.fetch() falls back to config/profile.yml target_roles when mycareersfuture.keywords[] is empty');
+    } else {
+      fail(`mycareersfuture.fetch() fallback search = ${JSON.stringify(sentSearch)}`);
+    }
+
+    // No entry keywords AND no profile.yml at all → throws.
+    let threwNoKeywords = false;
+    let threwMessage = '';
+    try {
+      await withTmpCwd(
+        () => {}, // no config/ dir created — profile.yml genuinely absent
+        () => mycareersfuture.fetch({ provider: 'mycareersfuture', name: 'No Keywords' }, { fetchJson: async () => ({ results: [] }) }),
+      );
+    } catch (err) {
+      threwNoKeywords = true;
+      threwMessage = err.message;
+    }
+    if (threwNoKeywords && /no mycareersfuture\.keywords/.test(threwMessage)) {
+      pass('mycareersfuture.fetch() throws a clear error when no keywords and no profile.yml fallback are available');
+    } else {
+      fail(`mycareersfuture.fetch() should throw when no keywords are available from any source, got: threw=${threwNoKeywords} message=${JSON.stringify(threwMessage)}`);
+    }
   }
 } catch (e) {
   fail(`mycareersfuture provider tests crashed: ${e.message}`);
