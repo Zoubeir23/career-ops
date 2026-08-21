@@ -90,7 +90,7 @@ export function buildFeedUrl(keyword, page) {
 }
 
 /** @param {string} url */
-function assertJobBankUrl(url) {
+export function assertJobBankUrl(url) {
   let parsed;
   try {
     parsed = new URL(url);
@@ -117,9 +117,14 @@ function tagText(block, tag) {
 }
 
 // <link rel="alternate" type="text/html" href="..."/> — an attribute here,
-// not inner text (Atom), unlike an RSS <link>text</link>.
+// not inner text (Atom), unlike an RSS <link>text</link>. An Atom entry may
+// carry several <link> elements (e.g. a "self" link alongside "alternate");
+// the human-facing posting page is specifically the "alternate" one, so it is
+// preferred over whichever <link> happens to come first.
 function linkHref(block) {
-  const m = block.match(/<link\b[^>]*\bhref="([^"]*)"[^>]*\/?>/i);
+  const links = block.match(/<link\b[^>]*>/gi) || [];
+  const alternate = links.find((l) => /\brel="alternate"/i.test(l)) || links[0];
+  const m = alternate && alternate.match(/\bhref="([^"]*)"/i);
   return m ? decodeEntities(m[1]).trim() : '';
 }
 
@@ -139,10 +144,34 @@ function cleanUrl(value) {
 // Each label is extracted independently — Salary is often present but is not
 // part of the Job shape (_types.js), so it is read here only to bound the
 // other two fields' matches and is otherwise discarded.
+// Strips HTML tags to bare fixed-point, not one regex pass: a single
+// `.replace(/<[^>]+>/g, '')` call can leave a residual tag-shaped fragment
+// behind when the source deliberately nests malformed brackets (CodeQL
+// js/incomplete-multi-character-sanitization) — this is a government feed,
+// not attacker-controlled by design, but the summary text still ultimately
+// originates from a third-party employer's posting content, so it is not
+// trusted input either. Looping until a pass changes nothing closes that gap
+// without needing a real HTML parser for two plain-text labels.
+function stripTags(s) {
+  let prev;
+  let out = s;
+  do {
+    prev = out;
+    out = out.replace(/<[^>]+>/g, '');
+  } while (out !== prev);
+  // A malformed/nested bracket construct (`<<a>b>`) can leave a lone `>` (or,
+  // symmetrically, a lone `<`) behind even at fixed point: the loop above only
+  // ever removes a COMPLETE `<...>` span, and a stray unmatched bracket is
+  // never one. Neither field this feeds is meant to carry markup at all, so
+  // any remaining bracket — paired or not — is simply dropped rather than
+  // trusted to be inert.
+  return out.replace(/[<>]/g, '');
+}
+
 function summaryField(summaryHtml, label) {
   const re = new RegExp(`<strong>${label}:</strong>\\s*([\\s\\S]*?)\\s*(?:<br\\s*/?>|$)`, 'i');
   const m = summaryHtml.match(re);
-  return m ? decodeEntities(m[1]).replace(/<[^>]+>/g, '').trim() : '';
+  return m ? stripTags(decodeEntities(m[1])).trim() : '';
 }
 
 /**
@@ -153,7 +182,7 @@ function summaryField(summaryHtml, label) {
 export function parseJobBankFeed(xml) {
   /** @type {{title: string, url: string, company: string, location: string, postedAt?: number}[]} */
   const jobs = [];
-  const entries = String(xml ?? '').match(/<entry>[\s\S]*?<\/entry>/gi) || [];
+  const entries = String(xml ?? '').match(/<entry\b[^>]*>[\s\S]*?<\/entry>/gi) || [];
 
   for (const entry of entries) {
     const url = cleanUrl(linkHref(entry));
