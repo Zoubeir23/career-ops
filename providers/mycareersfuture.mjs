@@ -43,4 +43,28 @@
 // impersonate a browser against a government API that already answers an
 // honest bot identifier.
 
-export {};
+import { intInRange } from './_config-utils.mjs';
+
+const MAX_PAGE_SIZE = 100; // server-enforced ceiling, confirmed by execution
+const DEFAULT_MAX_PAGES = 5; // 5 x 100 = 500 postings/keyword before over-fetch stops paying off
+const MAX_PAGES_CAP = 20; // hard ceiling regardless of entry.max_pages / ctx.maxPages misconfiguration
+
+/**
+ * Reads and sanitizes the entry's `mycareersfuture:` config block, plus the
+ * shared `max_pages` field (same key jobbankca.mjs/workday.mjs use).
+ * @param {{ mycareersfuture?: any, max_pages?: unknown }} entry
+ * @returns {{ keywords: string[], size: number, maxPages: number }}
+ */
+export function parseConfig(entry) {
+  const cfg = (entry && entry.mycareersfuture) || {};
+  const keywords = [...new Set(
+    (Array.isArray(cfg.keywords) ? cfg.keywords : [])
+      .filter((k) => typeof k === 'string' && k.trim())
+      .map((k) => k.trim()),
+  )];
+  return {
+    keywords,
+    size: intInRange(cfg.size, MAX_PAGE_SIZE, 1, MAX_PAGE_SIZE),
+    maxPages: Math.min(intInRange(entry && entry.max_pages, DEFAULT_MAX_PAGES, 1, MAX_PAGES_CAP), MAX_PAGES_CAP),
+  };
+}
