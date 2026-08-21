@@ -10,7 +10,7 @@ console.log('\nProvider — jobbankca');
 try {
   const mod = await import(pathToFileURL(join(ROOT, 'providers/jobbankca.mjs')).href);
   const jobbankca = mod.default;
-  const { parseJobBankFeed, parseJobBankConfig, buildFeedUrl } = mod;
+  const { parseJobBankFeed, parseJobBankConfig, buildFeedUrl, assertJobBankUrl } = mod;
 
   if (jobbankca.id === 'jobbankca') pass('jobbankca.id is "jobbankca"');
   else fail(`jobbankca.id is ${JSON.stringify(jobbankca.id)}`);
@@ -139,6 +139,86 @@ try {
     pass('parseJobBankFeed empty / non-string feed -> empty result (no crash)');
   } else {
     fail('parseJobBankFeed empty / non-string feed should yield empty result');
+  }
+
+  // ── review findings: prefer rel="alternate", tolerate <entry> attributes,
+  // strip HTML tags to a fixed point ──
+
+  const multiLinkEntry = `<entry>
+    <title><![CDATA[multi-link]]></title>
+    <link rel="self" type="application/atom+xml" href="https://www.jobbank.gc.ca/jobsearch/jobSearchRSSfeed?id=1"/>
+    <link rel="alternate" type="text/html" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50999999"/>
+    <id>1</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> X]]></summary>
+  </entry>`;
+  const multiLinkJobs = parseJobBankFeed(multiLinkEntry);
+  if (multiLinkJobs[0]?.url === 'https://www.jobbank.gc.ca/jobsearch/jobposting/50999999') {
+    pass('parseJobBankFeed prefers the rel="alternate" link when several <link> elements are present');
+  } else {
+    fail(`multi-link entry url = ${JSON.stringify(multiLinkJobs[0]?.url)}`);
+  }
+
+  const attributedEntry = `<entry xml:lang="en">
+    <title><![CDATA[attributed entry]]></title>
+    <link rel="alternate" type="text/html" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50888888"/>
+    <id>2</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> X]]></summary>
+  </entry>`;
+  if (parseJobBankFeed(attributedEntry).length === 1) {
+    pass('parseJobBankFeed still matches an <entry> that carries its own attributes');
+  } else {
+    fail(`attributed <entry> yielded ${parseJobBankFeed(attributedEntry).length} jobs (expected 1)`);
+  }
+
+  // Incomplete-sanitization probes (CodeQL js/incomplete-multi-character-
+  // sanitization): a single non-looped tag-strip can leave a residual
+  // tag-shaped fragment; a malformed/nested bracket construct can leave a
+  // LONE unmatched '<' or '>' behind even at fixed point. Neither field is
+  // meant to carry markup at all, so the bar is "no bracket survives",
+  // paired or not — not merely "no complete tag survives".
+  const scriptProbeEntry = `<entry>
+    <title><![CDATA[tag-strip probe: script]]></title>
+    <link rel="alternate" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50777777"/>
+    <id>3</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> <<script>script>alert(1)</strong>]]></summary>
+  </entry>`;
+  const scriptProbeLocation = parseJobBankFeed(scriptProbeEntry)[0]?.location ?? '';
+  if (!scriptProbeLocation.includes('<') && !scriptProbeLocation.includes('>')) {
+    pass('parseJobBankFeed strips a nested <<script> probe to zero surviving angle brackets');
+  } else {
+    fail(`script-probe location retained markup: ${JSON.stringify(scriptProbeLocation)}`);
+  }
+
+  const nestedTagProbeEntry = `<entry>
+    <title><![CDATA[tag-strip probe: nested]]></title>
+    <link rel="alternate" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50777778"/>
+    <id>3b</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Employer:</strong> <<a>b>Acme<br/>]]></summary>
+  </entry>`;
+  const nestedTagProbeCompany = parseJobBankFeed(nestedTagProbeEntry)[0]?.company ?? '';
+  if (!nestedTagProbeCompany.includes('<') && !nestedTagProbeCompany.includes('>')) {
+    pass('parseJobBankFeed strips a nested <<a>b> probe to zero surviving angle brackets');
+  } else {
+    fail(`nested-tag-probe company retained markup: ${JSON.stringify(nestedTagProbeCompany)}`);
+  }
+  // stripTags also needs to be idempotent on ordinary, non-adversarial input —
+  // the fixed-point loop must not eat past a SINGLE well-formed tag pair.
+  const ordinaryEntry = `<entry>
+    <title><![CDATA[ordinary tags]]></title>
+    <link rel="alternate" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50666666"/>
+    <id>4</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> <em>Remote</em> (Canada-wide)]]></summary>
+  </entry>`;
+  const ordinaryLocation = parseJobBankFeed(ordinaryEntry)[0]?.location ?? '';
+  if (ordinaryLocation === 'Remote (Canada-wide)') {
+    pass('parseJobBankFeed strips ordinary well-formed tags cleanly, without over-eating adjacent text');
+  } else {
+    fail(`ordinary summary location = ${JSON.stringify(ordinaryLocation)}`);
   }
 
   // ── fetch(): keyword requirement + config/profile.yml fallback. Runs in an
@@ -308,6 +388,46 @@ try {
       pass('jobbankca.fetch() sends a User-Agent header');
     } else {
       fail(`jobbankca.fetch() should send a User-Agent header, got: ${JSON.stringify(capturedOpts)}`);
+    }
+  }
+
+  // ── assertJobBankUrl: host guard ──
+  try {
+    assertJobBankUrl('https://evil.example.com/jobsearch/feed/jobSearchRSSfeed');
+    fail('assertJobBankUrl() should throw for a non-jobbank.gc.ca host');
+  } catch (err) {
+    if (/untrusted hostname/.test(err.message)) pass('assertJobBankUrl() throws for an untrusted hostname');
+    else fail(`assertJobBankUrl() threw an unexpected error: ${err.message}`);
+  }
+  try {
+    assertJobBankUrl('http://www.jobbank.gc.ca/jobsearch/feed/jobSearchRSSfeed');
+    fail('assertJobBankUrl() should throw for a non-HTTPS URL');
+  } catch (err) {
+    if (/must use HTTPS/.test(err.message)) pass('assertJobBankUrl() throws for a non-HTTPS URL');
+    else fail(`assertJobBankUrl() threw an unexpected error: ${err.message}`);
+  }
+  const trustedTestUrl = buildFeedUrl('x', 1);
+  if (assertJobBankUrl(trustedTestUrl) === trustedTestUrl) {
+    pass('assertJobBankUrl() returns the URL unchanged when it is trusted');
+  } else {
+    fail('assertJobBankUrl() should return a trusted URL unchanged');
+  }
+
+  // ── fetch(): entry.max_pages is clamped to MAX_PAGES_CAP (20) ──
+  {
+    const fullPage = (n) => `<?xml version="1.0"?><feed>${Array.from({ length: 100 }, (_, i) => `<entry><title><![CDATA[r${n}-${i}]]></title><link rel="alternate" href="https://www.jobbank.gc.ca/jobsearch/jobposting/${n}-${i}"/><id>${n}-${i}</id><updated>2026-08-20T08:00:00Z</updated><summary><![CDATA[x]]></summary></entry>`).join('')}</feed>`;
+    let requestCount = 0;
+    await jobbankca.fetch(
+      // Every page returns a FULL (100-entry) page, so pagination would run
+      // forever without the cap — this isolates the cap as the only thing
+      // that can stop it.
+      { provider: 'jobbankca', name: 'Cap test', jobbankca: { keywords: ['x'] }, max_pages: 100 },
+      { sleep: async () => {}, fetchText: async () => fullPage(requestCount++) },
+    );
+    if (requestCount === 20) {
+      pass('jobbankca.fetch() clamps entry.max_pages (100) down to MAX_PAGES_CAP (20)');
+    } else {
+      fail(`jobbankca.fetch() made ${requestCount} requests with max_pages:100 (expected 20, the cap)`);
     }
   }
 } catch (e) {
