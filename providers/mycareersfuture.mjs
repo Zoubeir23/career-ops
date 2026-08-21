@@ -68,3 +68,23 @@ export function parseConfig(entry) {
     maxPages: Math.min(intInRange(entry && entry.max_pages, DEFAULT_MAX_PAGES, 1, MAX_PAGES_CAP), MAX_PAGES_CAP),
   };
 }
+
+const TRUSTED_JOB_HOST = 'www.mycareersfuture.gov.sg';
+
+/**
+ * Cleans and host-locks a job detail URL straight from the API response —
+ * defense in depth against the API ever returning (or being tricked into
+ * returning) an off-host URL, the same discipline jobbankca.mjs applies to
+ * its Atom `<link href>`.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function cleanUrl(value) {
+  if (typeof value !== 'string' || !value.trim()) return '';
+  try {
+    const parsed = new URL(value.trim());
+    return parsed.protocol === 'https:' && parsed.hostname === TRUSTED_JOB_HOST ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
