@@ -88,3 +88,34 @@ export function cleanUrl(value) {
     return '';
   }
 }
+
+/**
+ * Normalizes one raw `results[]` record into a Job plus its jobPostId (kept
+ * for dedup, stripped before the provider returns it). Returns null when the
+ * posting lacks a usable id, title, or trusted url.
+ *
+ * `company` prefers `hiringCompany` (the real employer) over `postedCompany`
+ * (the poster, which is a recruitment agency when `isPostedOnBehalf` is
+ * true) — confirmed live samples never populated `hiringCompany`, but the
+ * schema clearly reserves it for exactly this case, so preferring it costs
+ * nothing on the common path and gets the right answer on the uncommon one.
+ * @param {any} r
+ * @returns {({title: string, url: string, company: string, location: string, postedAt?: number, id: string}) | null}
+ */
+export function normalizeJob(r) {
+  const id = r && r.metadata && r.metadata.jobPostId;
+  const title = String((r && r.title) || '').trim();
+  const url = cleanUrl(r && r.metadata && r.metadata.jobDetailsUrl);
+  if (!id || !title || !url) return null;
+  const company = String(
+    (r.hiringCompany && r.hiringCompany.name)
+    || (r.postedCompany && r.postedCompany.name)
+    || '',
+  ).trim();
+  const districts = Array.isArray(r.address && r.address.districts) ? r.address.districts : [];
+  const location = districts.map((d) => d && d.location).filter(Boolean).join(', ');
+  const result = { title, url, company, location, id: String(id) };
+  const posted = Date.parse((r.metadata && r.metadata.newPostingDate) || '');
+  if (Number.isFinite(posted)) result.postedAt = posted;
+  return result;
+}
