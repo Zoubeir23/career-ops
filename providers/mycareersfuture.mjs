@@ -80,6 +80,14 @@ const TRUSTED_JOB_HOST = 'www.mycareersfuture.gov.sg';
  * defense in depth against the API ever returning (or being tricked into
  * returning) an off-host URL, the same discipline jobbankca.mjs applies to
  * its Atom `<link href>`.
+ *
+ * Requires the trusted host's exact default-port HTTPS origin with no
+ * embedded credentials: `.hostname` alone already can't be fooled by a
+ * `https://TRUSTED_JOB_HOST@evil.example/` userinfo trick (`.hostname`
+ * extracts only the real host, `evil.example` there), but a URL carrying a
+ * non-default port or `user:pass@` userinfo on the REAL host would still
+ * pass a `.hostname`-only check — confirmed by execution — and has no
+ * legitimate reason to appear in this feed, so both are rejected outright.
  * @param {unknown} value
  * @returns {string}
  */
@@ -87,7 +95,13 @@ export function cleanUrl(value) {
   if (typeof value !== 'string' || !value.trim()) return '';
   try {
     const parsed = new URL(value.trim());
-    return parsed.protocol === 'https:' && parsed.hostname === TRUSTED_JOB_HOST ? parsed.href : '';
+    return parsed.protocol === 'https:'
+      && parsed.hostname === TRUSTED_JOB_HOST
+      && parsed.port === ''
+      && parsed.username === ''
+      && parsed.password === ''
+      ? parsed.href
+      : '';
   } catch {
     return '';
   }

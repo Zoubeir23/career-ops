@@ -92,6 +92,33 @@ try {
     fail('cleanUrl() should return "" for empty/non-string/unparseable input');
   }
 
+  // ── cleanUrl — port/userinfo rejection. `.hostname` alone can't be fooled
+  // by the classic `https://TRUSTED@evil.example/` userinfo trick (it
+  // extracts only the real host), but a non-default port or embedded
+  // credentials on the REAL trusted host still passed a `.hostname`-only
+  // check — confirmed by execution — and have no legitimate reason to
+  // appear in this feed. ──
+  if (cleanUrl('https://www.mycareersfuture.gov.sg:9999/job/evil') === '') {
+    pass('cleanUrl() rejects a non-default port on the trusted host');
+  } else {
+    fail(`cleanUrl(non-default port) = ${JSON.stringify(cleanUrl('https://www.mycareersfuture.gov.sg:9999/job/evil'))}`);
+  }
+  if (cleanUrl('https://user:pass@www.mycareersfuture.gov.sg/job/x') === '') {
+    pass('cleanUrl() rejects embedded username:password credentials on the trusted host');
+  } else {
+    fail(`cleanUrl(credentials) = ${JSON.stringify(cleanUrl('https://user:pass@www.mycareersfuture.gov.sg/job/x'))}`);
+  }
+  if (cleanUrl('https://user@www.mycareersfuture.gov.sg/job/x') === '') {
+    pass('cleanUrl() rejects a bare username with no password on the trusted host');
+  } else {
+    fail(`cleanUrl(username only) = ${JSON.stringify(cleanUrl('https://user@www.mycareersfuture.gov.sg/job/x'))}`);
+  }
+  if (cleanUrl('https://www.mycareersfuture.gov.sg:443/job/x') === 'https://www.mycareersfuture.gov.sg/job/x') {
+    pass('cleanUrl() still accepts an explicit default HTTPS port (443), normalized away by URL parsing');
+  } else {
+    fail(`cleanUrl(explicit :443) = ${JSON.stringify(cleanUrl('https://www.mycareersfuture.gov.sg:443/job/x'))}`);
+  }
+
   // ── normalizeJob — fixture shaped from a real record captured 2026-08-21
   // from the live public search API. ──
   const sampleRecord = {
