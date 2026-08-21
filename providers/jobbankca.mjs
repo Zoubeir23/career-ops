@@ -129,10 +129,23 @@ function tagText(block, tag) {
 // the feed's usual double-quoted form followed by an "alternate" link in the
 // (equally valid) single-quoted form must still be recognized as alternate,
 // not silently treated as unmarked and only won by list order.
+//
+// The tag match and both attribute matches are anchored precisely, not just
+// prefix-matched: `\b` alone is a WORD boundary, not an element/attribute-name
+// boundary, so `/<link\b/` also matches `<link-extension` (`-` is already a
+// non-word character) and `/\brel=/` also matches `data-rel=` or `xlink:rel=`
+// the same way. A same-host extension attribute smuggled in that shape would
+// silently redirect the dedup/apply URL without ever failing the trusted-host
+// check. `(?=[\s/>])` after `link` requires the tag name to end exactly
+// there; `(?<=\s)` before `rel`/`href` requires the attribute name to start
+// exactly there — always true for a real attribute (XML requires whitespace
+// before every attribute, including the first, which the tag-boundary
+// lookahead above already guarantees), never true for `data-rel`/
+// `xlink:href`, where the character before "rel"/"href" is a hyphen or colon.
 function linkHref(block) {
-  const links = block.match(/<link\b[^>]*>/gi) || [];
-  const alternate = links.find((l) => /\brel\s*=\s*(["'])alternate\1/i.test(l)) || links[0];
-  const m = alternate && alternate.match(/\bhref\s*=\s*(["'])(.*?)\1/i);
+  const links = block.match(/<link(?=[\s/>])[^>]*>/gi) || [];
+  const alternate = links.find((l) => /(?<=\s)rel\s*=\s*(["'])alternate\1/i.test(l)) || links[0];
+  const m = alternate && alternate.match(/(?<=\s)href\s*=\s*(["'])(.*?)\1/i);
   return m ? decodeEntities(m[2]).trim() : '';
 }
 
