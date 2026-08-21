@@ -44,6 +44,8 @@
 // honest bot identifier.
 
 import { intInRange } from './_config-utils.mjs';
+import { resolveProfileKeywords } from './_profile-keywords.mjs';
+import { fetchJsonWithRetry } from './_http.mjs';
 
 const MAX_PAGE_SIZE = 100; // server-enforced ceiling, confirmed by execution
 const DEFAULT_MAX_PAGES = 5; // 5 x 100 = 500 postings/keyword before over-fetch stops paying off
@@ -119,3 +121,87 @@ export function normalizeJob(r) {
   if (Number.isFinite(posted)) result.postedAt = posted;
   return result;
 }
+
+const API_URL = 'https://api.mycareersfuture.gov.sg/v2/search';
+
+/** @type {Provider} */
+export default {
+  id: 'mycareersfuture',
+
+  detect(entry) {
+    return entry?.provider === 'mycareersfuture' ? { url: API_URL } : null;
+  },
+
+  /**
+   * Fetches and normalizes postings from MyCareersFuture's public search API.
+   * @param {{ name?: string, mycareersfuture?: any, max_pages?: unknown }} entry
+   * @param {{ fetchJson: (url: string, opts?: object) => Promise<any>, maxPages?: number }} ctx
+   * @returns {Promise<Array<{title: string, url: string, company: string, location: string, postedAt?: number}>>}
+   */
+  async fetch(entry, ctx) {
+    const { size, maxPages: configuredMaxPages, keywords: ownKeywords } = parseConfig(entry);
+    let keywords = ownKeywords;
+    // Fall back to config/profile.yml's target_roles when this entry has no
+    // mycareersfuture.keywords[] of its own — same convention vdab.mjs and
+    // jobbankca.mjs use, so a user who already onboarded with target roles
+    // doesn't have to duplicate them into every keyword-required provider's
+    // config by hand.
+    if (!keywords.length) keywords = resolveProfileKeywords();
+    if (!keywords.length) {
+      throw new Error(`mycareersfuture: entry "${entry?.name || '(unnamed)'}" has no mycareersfuture.keywords[] and no config/profile.yml target_roles to fall back to`);
+    }
+
+    // Same probe-vs-real-scan split as vdab.mjs/jobbankca.mjs: verify-portals.mjs's
+    // bounded health probe passes ctx.maxPages so a liveness check can't walk
+    // the whole board; a real scan (ctx.maxPages unset) uses the configured cap.
+    const probing = Number.isInteger(ctx?.maxPages) && ctx.maxPages > 0;
+    const pageLimit = probing ? Math.min(ctx.maxPages, configuredMaxPages) : configuredMaxPages;
+
+    /** @param {string} keyword */
+    const fetchKeyword = async (keyword) => {
+      const out = [];
+      for (let page = 0; page < pageLimit; page++) {
+        const json = await fetchJsonWithRetry(ctx, `${API_URL}?limit=${size}&page=${page}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ search: keyword, sortBy: ['new_posting_date'], page }),
+          redirect: 'error',
+          timeoutMs: 12_000,
+        });
+        const results = Array.isArray(json && json.results) ? json.results : [];
+        out.push(...results);
+        if (results.length < size) break; // short page → done
+      }
+      return out;
+    };
+
+    const byId = new Map();
+    const errors = [];
+    let succeeded = 0; // keywords whose request completed (i.e. the source answered)
+    for (const keyword of keywords) {
+      let raw;
+      try {
+        raw = await fetchKeyword(keyword);
+        succeeded++;
+      } catch (err) {
+        if (probing) throw err;
+        // Recall-first: tolerate a single failed keyword and keep going.
+        errors.push(`"${keyword}": ${(err && err.message) || err}`);
+        continue;
+      }
+      for (const r of raw) {
+        const job = normalizeJob(r);
+        if (job && !byId.has(job.id)) byId.set(job.id, job);
+      }
+    }
+
+    // Total outage = every keyword request failed. A keyword that answered
+    // with zero results is not an outage, so key off the success count, not
+    // the deduped result size — otherwise a legitimately-empty search throws.
+    if (succeeded === 0 && errors.length) {
+      throw new Error(`mycareersfuture: all ${keywords.length} keyword request(s) failed — ${errors[0]}`);
+    }
+
+    return [...byId.values()].map(({ id, ...job }) => job);
+  },
+};
