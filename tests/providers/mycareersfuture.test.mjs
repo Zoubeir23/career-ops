@@ -63,6 +63,32 @@ try {
   } else {
     fail(`parseConfig({}).maxPages = ${parseConfig({}).maxPages} (expected 5)`);
   }
+
+  // ── cleanUrl ──
+  const trustedUrl = 'https://www.mycareersfuture.gov.sg/job/others/example-abc123';
+  if (cleanUrl(trustedUrl) === trustedUrl) {
+    pass('cleanUrl() returns a trusted https URL unchanged');
+  } else {
+    fail(`cleanUrl(trusted) = ${JSON.stringify(cleanUrl(trustedUrl))}`);
+  }
+
+  if (cleanUrl('https://evil.example.com/job/abc') === '') {
+    pass('cleanUrl() rejects an untrusted hostname');
+  } else {
+    fail(`cleanUrl(untrusted host) = ${JSON.stringify(cleanUrl('https://evil.example.com/job/abc'))}`);
+  }
+
+  if (cleanUrl('http://www.mycareersfuture.gov.sg/job/abc') === '') {
+    pass('cleanUrl() rejects a non-HTTPS URL');
+  } else {
+    fail(`cleanUrl(http) = ${JSON.stringify(cleanUrl('http://www.mycareersfuture.gov.sg/job/abc'))}`);
+  }
+
+  if (cleanUrl('') === '' && cleanUrl(null) === '' && cleanUrl(undefined) === '' && cleanUrl('not a url') === '') {
+    pass('cleanUrl() returns "" for empty/non-string/unparseable input without throwing');
+  } else {
+    fail('cleanUrl() should return "" for empty/non-string/unparseable input');
+  }
 } catch (e) {
   fail(`mycareersfuture provider tests crashed: ${e.message}`);
 }
