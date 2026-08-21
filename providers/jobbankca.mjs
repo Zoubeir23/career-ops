@@ -122,31 +122,29 @@ function tagText(block, tag) {
 // the human-facing posting page is specifically the "alternate" one, so it is
 // preferred over whichever <link> happens to come first.
 //
-// XML attribute syntax permits single OR double quotes and whitespace around
-// `=` (this feed has only ever been observed using double quotes with none),
-// so both attribute matches accept either quote character and optional
-// spacing rather than assuming the one shape seen so far — a "self" link in
-// the feed's usual double-quoted form followed by an "alternate" link in the
-// (equally valid) single-quoted form must still be recognized as alternate,
-// not silently treated as unmarked and only won by list order.
-//
-// The tag match and both attribute matches are anchored precisely, not just
-// prefix-matched: `\b` alone is a WORD boundary, not an element/attribute-name
-// boundary, so `/<link\b/` also matches `<link-extension` (`-` is already a
-// non-word character) and `/\brel=/` also matches `data-rel=` or `xlink:rel=`
-// the same way. A same-host extension attribute smuggled in that shape would
-// silently redirect the dedup/apply URL without ever failing the trusted-host
-// check. `(?=[\s/>])` after `link` requires the tag name to end exactly
-// there; `(?<=\s)` before `rel`/`href` requires the attribute name to start
-// exactly there — always true for a real attribute (XML requires whitespace
-// before every attribute, including the first, which the tag-boundary
-// lookahead above already guarantees), never true for `data-rel`/
-// `xlink:href`, where the character before "rel"/"href" is a hyphen or colon.
+// Attributes are tokenized sequentially with a global regex (`attrsOf`)
+// rather than searched for with a standalone `rel=`/`href=` pattern. A
+// standalone pattern scans the ENTIRE tag text, including the inside of
+// other attributes' quoted values — so a same-host attack tag like
+// `<link data=" rel='alternate' href='.../WRONG'" rel="self" href="REAL"/>`
+// has a `rel='alternate' href='...'` substring inside `data="..."` that is
+// preceded by whitespace exactly like a real attribute, defeating even a
+// precisely word-boundary-anchored pattern (confirmed by execution: it
+// returned WRONG). Sequential tokenization can't make this mistake because
+// each match consumes a full `name="value"` pair before the next match
+// starts, so a quoted value's contents are never re-scanned as siblings.
+function attrsOf(tag) {
+  const attrs = {};
+  const re = /([a-zA-Z_:][-\w:.]*)\s*=\s*(["'])((?:(?!\2)[\s\S])*)\2/g;
+  let m;
+  while ((m = re.exec(tag))) attrs[m[1].toLowerCase()] = m[3];
+  return attrs;
+}
+
 function linkHref(block) {
-  const links = block.match(/<link(?=[\s/>])[^>]*>/gi) || [];
-  const alternate = links.find((l) => /(?<=\s)rel\s*=\s*(["'])alternate\1/i.test(l)) || links[0];
-  const m = alternate && alternate.match(/(?<=\s)href\s*=\s*(["'])(.*?)\1/i);
-  return m ? decodeEntities(m[2]).trim() : '';
+  const links = (block.match(/<link(?=[\s/>])[^>]*>/gi) || []).map(attrsOf);
+  const alternate = links.find((a) => (a.rel || '').toLowerCase() === 'alternate') || links[0];
+  return alternate && alternate.href ? decodeEntities(alternate.href).trim() : '';
 }
 
 function cleanUrl(value) {

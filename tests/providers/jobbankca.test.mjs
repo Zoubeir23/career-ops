@@ -230,6 +230,27 @@ try {
     fail(`extension-attribute entry url = ${JSON.stringify(extensionAttrJobs[0]?.url)}`);
   }
 
+  // Review finding: rel=/href= appearing INSIDE another attribute's quoted
+  // value (not as a hyphen/colon-prefixed name — the previous two probes'
+  // fix — but genuinely preceded by whitespace, just nested one level
+  // deeper). A pattern that scans the whole tag text for `rel=`/`href=`
+  // can't tell "top-level attribute" from "substring inside a quoted value"
+  // without tracking quote state; only sequential tokenization can.
+  const embeddedAttrValueEntry = `<entry>
+    <title><![CDATA[embedded-attribute-value probe]]></title>
+    <link data=" rel='alternate' href='https://www.jobbank.gc.ca/jobsearch/jobposting/WRONG3'" rel="self" href="https://www.jobbank.gc.ca/jobsearch/self3"/>
+    <link rel="alternate" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50999994"/>
+    <id>2e</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> X]]></summary>
+  </entry>`;
+  const embeddedAttrValueJobs = parseJobBankFeed(embeddedAttrValueEntry);
+  if (embeddedAttrValueJobs[0]?.url === 'https://www.jobbank.gc.ca/jobsearch/jobposting/50999994') {
+    pass('parseJobBankFeed ignores rel=/href= text embedded inside another attribute\'s quoted value');
+  } else {
+    fail(`embedded-attribute-value entry url = ${JSON.stringify(embeddedAttrValueJobs[0]?.url)}`);
+  }
+
   const attributedEntry = `<entry xml:lang="en">
     <title><![CDATA[attributed entry]]></title>
     <link rel="alternate" type="text/html" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50888888"/>
