@@ -78,24 +78,39 @@ export function extractJsonObject(text) {
   // prose that `start` alone exceeds `frag.length`, EVERY frag-relative
   // comma index satisfies `<= start` trivially, so backtracking stops on its
   // first attempt even when a valid earlier candidate exists inside frag.
+  //
+  // A backtrack candidate must also land at ROOT-OBJECT depth (depth 1, i.e.
+  // directly inside the outer `{`) — not at any structural comma regardless
+  // of nesting. A comma one level deeper separates two properties WITHIN one
+  // field's own value object ("value" from "needs_confirmation", say), and
+  // that field is only complete once BOTH have arrived. Accepting a
+  // depth-2+ comma as a boundary can close that field early and hand back a
+  // FABRICATED partial answer that looks complete but silently dropped
+  // content the planner never finished writing — worse than omitting the
+  // field, because the caller has no way to tell the two apart.
   const frag = s.slice(start);
   const structural = new Array(frag.length).fill(false);
+  const depths = new Array(frag.length).fill(0);
   {
     let inStr2 = false;
     let esc2 = false;
+    let depth2 = 0;
     for (let i = 0; i < frag.length; i++) {
       const c = frag[i];
       structural[i] = !inStr2;
+      depths[i] = depth2;
       if (inStr2) {
         if (esc2) esc2 = false;
         else if (c === "\\") esc2 = true;
         else if (c === '"') inStr2 = false;
       } else if (c === '"') inStr2 = true;
+      else if (c === "{") depth2++;
+      else if (c === "}") depth2--;
     }
   }
   const lastStructuralComma = (before) => {
     for (let i = before - 1; i >= 0; i--) {
-      if (frag[i] === "," && structural[i]) return i;
+      if (frag[i] === "," && structural[i] && depths[i] === 1) return i;
     }
     return -1;
   };
