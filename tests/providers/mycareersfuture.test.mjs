@@ -409,6 +409,23 @@ try {
       fail(`mycareersfuture.fetch() with {} response returned ${JSON.stringify(emptyBody)}`);
     }
   }
+
+  // ── fetch(): a non-ASCII keyword (Mandarin/Malay/Tamil are all official
+  // search languages on this board) passes through JSON.stringify unmangled
+  // — this provider, unlike the English-only ones, genuinely needs this to
+  // work for a Singapore user's real target roles. ──
+  {
+    let sentSearch = null;
+    await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Unicode keyword', mycareersfuture: { keywords: ['软件工程师'] } },
+      { fetchJson: async (url, opts) => { sentSearch = JSON.parse(opts.body).search; return { results: [] }; } },
+    );
+    if (sentSearch === '软件工程师') {
+      pass('mycareersfuture.fetch() passes a non-ASCII (Mandarin) keyword through unmangled');
+    } else {
+      fail(`mycareersfuture.fetch() sent search=${JSON.stringify(sentSearch)} for a Mandarin keyword`);
+    }
+  }
 } catch (e) {
   fail(`mycareersfuture provider tests crashed: ${e.message}`);
 }
