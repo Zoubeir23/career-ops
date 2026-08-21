@@ -262,6 +262,128 @@ try {
       fail(`mycareersfuture.fetch() request pages were ${requestedUrls.map((u) => new URL(u).searchParams.get('page'))} (expected ["0","1"])`);
     }
   }
+
+  // ── fetch(): ctx.maxPages caps entry.max_pages, not the other way around ──
+  {
+    const fullPage = (n) => Array.from({ length: 100 }, (_, i) => ({
+      metadata: { jobPostId: `${n}-${i}`, newPostingDate: '2026-08-20', jobDetailsUrl: `https://www.mycareersfuture.gov.sg/job/x/r-${n}-${i}` },
+      address: { districts: [{ location: 'X' }] },
+      postedCompany: { name: 'Co' },
+      title: `r${n}`,
+    }));
+    let requestCount = 0;
+    await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Capped', mycareersfuture: { keywords: ['x'] }, max_pages: 3 },
+      {
+        maxPages: 1, // a health-probe-style cap
+        fetchJson: async () => ({ results: fullPage(requestCount++) }),
+      },
+    );
+    if (requestCount === 1) pass('mycareersfuture.fetch(): ctx.maxPages caps entry.max_pages, not the other way around');
+    else fail(`mycareersfuture.fetch() made ${requestCount} requests under ctx.maxPages=1 (expected 1)`);
+  }
+
+  // ── fetch(): max_pages is clamped to MAX_PAGES_CAP (20) ──
+  {
+    const fullPage = (n) => Array.from({ length: 100 }, (_, i) => ({
+      metadata: { jobPostId: `${n}-${i}`, newPostingDate: '2026-08-20', jobDetailsUrl: `https://www.mycareersfuture.gov.sg/job/x/r-${n}-${i}` },
+      address: { districts: [{ location: 'X' }] },
+      postedCompany: { name: 'Co' },
+      title: `r${n}`,
+    }));
+    let requestCount = 0;
+    await mycareersfuture.fetch(
+      // Every page returns a FULL (100-entry) page, so pagination would run
+      // forever without the cap — this isolates the cap as the only thing
+      // that can stop it.
+      { provider: 'mycareersfuture', name: 'Cap test', mycareersfuture: { keywords: ['x'] }, max_pages: 100 },
+      { fetchJson: async () => ({ results: fullPage(requestCount++) }) },
+    );
+    if (requestCount === 20) {
+      pass('mycareersfuture.fetch() clamps entry.max_pages (100) down to MAX_PAGES_CAP (20)');
+    } else {
+      fail(`mycareersfuture.fetch() made ${requestCount} requests with max_pages:100 (expected 20, the cap)`);
+    }
+  }
+
+  // ── fetch(): recall-first — one failed keyword does not abort the others ──
+  {
+    const record = {
+      metadata: { jobPostId: 'ok-1', newPostingDate: '2026-08-20', jobDetailsUrl: 'https://www.mycareersfuture.gov.sg/job/x/ok' },
+      address: { districts: [{ location: 'X' }] },
+      postedCompany: { name: 'Co' },
+      title: 'ok',
+    };
+    const fetched = await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Partial failure', mycareersfuture: { keywords: ['bad', 'good'] } },
+      {
+        fetchJson: async (url, opts) => {
+          if (JSON.parse(opts.body).search === 'bad') throw new Error('network error');
+          return { results: [record] };
+        },
+      },
+    );
+    if (fetched.length === 1 && fetched[0].title === 'ok') {
+      pass('mycareersfuture.fetch(): a failed keyword does not abort keywords that still succeed');
+    } else {
+      fail(`mycareersfuture.fetch() with one failing keyword returned ${JSON.stringify(fetched)}`);
+    }
+  }
+
+  // ── fetch(): total outage throws ──
+  try {
+    await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Outage', mycareersfuture: { keywords: ['a', 'b'] } },
+      { fetchJson: async () => { throw new Error('boom'); } },
+    );
+    fail('mycareersfuture.fetch() should throw when every keyword request fails');
+  } catch (err) {
+    if (/all 2 keyword request\(s\) failed/.test(err.message)) pass('mycareersfuture.fetch() throws when every keyword fails (total outage)');
+    else fail(`mycareersfuture.fetch() threw an unexpected error on total outage: ${err.message}`);
+  }
+
+  // ── fetch(): dedups across keywords by jobPostId ──
+  {
+    const shared = {
+      metadata: { jobPostId: 'dup-1', newPostingDate: '2026-08-20', jobDetailsUrl: 'https://www.mycareersfuture.gov.sg/job/x/dup' },
+      address: { districts: [{ location: 'X' }] },
+      postedCompany: { name: 'Co' },
+      title: 'duplicate role',
+    };
+    const fetched = await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Dedup', mycareersfuture: { keywords: ['engineer', 'developer'] } },
+      { fetchJson: async () => ({ results: [shared] }) },
+    );
+    if (fetched.length === 1) pass('mycareersfuture.fetch() dedups the same jobPostId returned by two different keywords');
+    else fail(`mycareersfuture.fetch() with an overlapping keyword pair returned ${fetched.length} jobs (expected 1)`);
+  }
+
+  // ── fetch(): request hygiene ──
+  {
+    let capturedOpts = null;
+    let capturedUrl = null;
+    await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Hygiene', mycareersfuture: { keywords: ['x'] } },
+      {
+        fetchJson: async (url, opts) => { capturedUrl = url; capturedOpts = opts; return { results: [] }; },
+      },
+    );
+    if (capturedOpts && capturedOpts.redirect === 'error') {
+      pass('mycareersfuture.fetch() passes redirect:"error" to fetchJson (SSRF-via-redirect guard)');
+    } else {
+      fail(`mycareersfuture.fetch() should pass redirect:"error", got: ${JSON.stringify(capturedOpts)}`);
+    }
+    if (capturedOpts && capturedOpts.headers && capturedOpts.headers['content-type'] === 'application/json') {
+      pass('mycareersfuture.fetch() sends a JSON content-type header');
+    } else {
+      fail(`mycareersfuture.fetch() should send content-type: application/json, got: ${JSON.stringify(capturedOpts)}`);
+    }
+    if (capturedUrl && new URL(capturedUrl).origin + new URL(capturedUrl).pathname === 'https://api.mycareersfuture.gov.sg/v2/search') {
+      pass('mycareersfuture.fetch() requests the pinned v2/search endpoint');
+    } else {
+      fail(`mycareersfuture.fetch() requested ${JSON.stringify(capturedUrl)}`);
+    }
+  }
 } catch (e) {
   fail(`mycareersfuture provider tests crashed: ${e.message}`);
 }
