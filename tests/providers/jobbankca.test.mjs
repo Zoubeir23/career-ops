@@ -178,6 +178,58 @@ try {
     fail(`mixed-quote entry url = ${JSON.stringify(mixedQuoteJobs[0]?.url)}`);
   }
 
+  // Exercises the optional-whitespace-around-'=' half of the same syntax
+  // tolerance — the mixed-quote fixture above has none.
+  const spacedEqualsEntry = `<entry>
+    <title><![CDATA[spaced equals link]]></title>
+    <link rel = "self" href = "https://www.jobbank.gc.ca/jobsearch/jobSearchRSSfeed?id=2b"/>
+    <link rel = 'alternate' href = 'https://www.jobbank.gc.ca/jobsearch/jobposting/50999997'/>
+    <id>2b</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> X]]></summary>
+  </entry>`;
+  const spacedEqualsJobs = parseJobBankFeed(spacedEqualsEntry);
+  if (spacedEqualsJobs[0]?.url === 'https://www.jobbank.gc.ca/jobsearch/jobposting/50999997') {
+    pass('parseJobBankFeed tolerates whitespace around "=" in rel/href attributes');
+  } else {
+    fail(`spaced-equals entry url = ${JSON.stringify(spacedEqualsJobs[0]?.url)}`);
+  }
+
+  // Review findings: an extension-namespaced <link-extension> element, and an
+  // extension attribute (data-rel/data-href) smuggled onto a genuine <link>,
+  // must never be mistaken for the real element/attributes — both share a
+  // trusted host with the real target, so the host check alone can't catch a
+  // wrong pick.
+  const linkExtensionEntry = `<entry>
+    <title><![CDATA[link-extension probe]]></title>
+    <link-extension data-rel="alternate" data-href="https://www.jobbank.gc.ca/jobsearch/jobposting/WRONG"/>
+    <link rel="alternate" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50999996"/>
+    <id>2c</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> X]]></summary>
+  </entry>`;
+  const linkExtensionJobs = parseJobBankFeed(linkExtensionEntry);
+  if (linkExtensionJobs[0]?.url === 'https://www.jobbank.gc.ca/jobsearch/jobposting/50999996') {
+    pass('parseJobBankFeed ignores a <link-extension> element entirely, using only the real <link>');
+  } else {
+    fail(`link-extension entry url = ${JSON.stringify(linkExtensionJobs[0]?.url)}`);
+  }
+
+  const extensionAttrEntry = `<entry>
+    <title><![CDATA[extension attribute probe]]></title>
+    <link rel="self" data-rel="alternate" data-href="https://www.jobbank.gc.ca/jobsearch/jobposting/WRONG2" href="https://www.jobbank.gc.ca/jobsearch/self"/>
+    <link rel="alternate" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50999995"/>
+    <id>2d</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> X]]></summary>
+  </entry>`;
+  const extensionAttrJobs = parseJobBankFeed(extensionAttrEntry);
+  if (extensionAttrJobs[0]?.url === 'https://www.jobbank.gc.ca/jobsearch/jobposting/50999995') {
+    pass('parseJobBankFeed ignores data-rel/data-href extension attributes on a genuine <link>');
+  } else {
+    fail(`extension-attribute entry url = ${JSON.stringify(extensionAttrJobs[0]?.url)}`);
+  }
+
   const attributedEntry = `<entry xml:lang="en">
     <title><![CDATA[attributed entry]]></title>
     <link rel="alternate" type="text/html" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50888888"/>
