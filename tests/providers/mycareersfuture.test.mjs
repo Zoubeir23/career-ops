@@ -385,6 +385,20 @@ try {
     }
   }
 
+  // ── fetch(): entry.mycareersfuture.size reaches the URL's `limit` param ──
+  {
+    let capturedUrl = null;
+    await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Custom size', mycareersfuture: { keywords: ['x'], size: 25 } },
+      { fetchJson: async (url) => { capturedUrl = url; return { results: [] }; } },
+    );
+    if (new URL(capturedUrl).searchParams.get('limit') === '25') {
+      pass('mycareersfuture.fetch() honors a custom mycareersfuture.size as the URL limit param');
+    } else {
+      fail(`mycareersfuture.fetch() with size:25 requested limit=${new URL(capturedUrl).searchParams.get('limit')}`);
+    }
+  }
+
   // ── fetch(): tolerates a malformed/missing `results` field instead of
   // crashing — a transport bug or an unannounced API shape change should
   // surface as zero jobs from that page, not an unhandled exception. ──
