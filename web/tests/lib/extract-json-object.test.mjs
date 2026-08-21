@@ -72,3 +72,33 @@ test("an unbalanced fragment with nothing recoverable before the first field ret
   assert.equal(obj, null);
   assert.equal(truncated, true);
 });
+
+test("recovery still works when substantial prose precedes the opening brace", () => {
+  // `start` (an offset into the FULL string) used to be compared directly
+  // against a frag-relative backtrack index. With enough leading prose that
+  // start alone exceeds the JSON fragment's own length, every frag-relative
+  // comma satisfied that comparison trivially, so backtracking gave up on its
+  // first attempt even though a valid earlier candidate existed.
+  const longProse = "x".repeat(200) + " Here is the answer:\n\n";
+  const truncated =
+    longProse +
+    '{"name": {"value": "Jane Doe", "needs_confirmation": false}, "about_you": {"value": "cut off mid';
+  const { obj, truncated: wasTruncated } = extractJsonObject(truncated);
+  assert.notEqual(obj, null, "leading prose must not defeat recovery of an otherwise-valid earlier field");
+  assert.deepEqual(obj, { name: { value: "Jane Doe", needs_confirmation: false } });
+  assert.equal(wasTruncated, true);
+});
+
+test("a completed field's own string value may contain a literal unmatched brace", () => {
+  // A free-text answer that mentions code/config syntax is exactly the kind
+  // of content real LLM output contains. The literal '{' inside the STRING
+  // must not be counted as a structural brace when computing the pad, or an
+  // otherwise complete, valid field becomes unparseable.
+  const truncated =
+    '{"about_you": {"value": "I use patterns like {config here", "needs_confirmation": false}, ' +
+    '"other": {"value": "cut off mid';
+  const { obj, truncated: wasTruncated } = extractJsonObject(truncated);
+  assert.notEqual(obj, null, "a literal brace inside a completed field's string value must not block recovery");
+  assert.deepEqual(obj, { about_you: { value: "I use patterns like {config here", needs_confirmation: false } });
+  assert.equal(wasTruncated, true);
+});
