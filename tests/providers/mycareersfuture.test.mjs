@@ -384,6 +384,31 @@ try {
       fail(`mycareersfuture.fetch() requested ${JSON.stringify(capturedUrl)}`);
     }
   }
+
+  // ── fetch(): tolerates a malformed/missing `results` field instead of
+  // crashing — a transport bug or an unannounced API shape change should
+  // surface as zero jobs from that page, not an unhandled exception. ──
+  {
+    const malformed = await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Malformed', mycareersfuture: { keywords: ['x'] } },
+      { fetchJson: async () => ({ results: null }) },
+    );
+    if (Array.isArray(malformed) && malformed.length === 0) {
+      pass('mycareersfuture.fetch() tolerates a non-array results field, returning no jobs');
+    } else {
+      fail(`mycareersfuture.fetch() with results:null returned ${JSON.stringify(malformed)}`);
+    }
+
+    const emptyBody = await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Empty body', mycareersfuture: { keywords: ['x'] } },
+      { fetchJson: async () => ({}) },
+    );
+    if (Array.isArray(emptyBody) && emptyBody.length === 0) {
+      pass('mycareersfuture.fetch() tolerates a response with no results key at all');
+    } else {
+      fail(`mycareersfuture.fetch() with {} response returned ${JSON.stringify(emptyBody)}`);
+    }
+  }
 } catch (e) {
   fail(`mycareersfuture provider tests crashed: ${e.message}`);
 }
