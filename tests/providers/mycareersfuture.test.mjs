@@ -223,6 +223,45 @@ try {
       fail(`mycareersfuture.fetch() should throw when no keywords are available from any source, got: threw=${threwNoKeywords} message=${JSON.stringify(threwMessage)}`);
     }
   }
+
+  // ── fetch(): pagination stops on a short page, and advances via the QUERY
+  // STRING page param — confirmed live that the JSON body's page field is
+  // NOT what advances pages, so a test that only varied body.page would pass
+  // even on a provider that never changed the URL at all. ──
+  {
+    const record = (n) => ({
+      metadata: { jobPostId: `id-${n}`, newPostingDate: '2026-08-20', jobDetailsUrl: `https://www.mycareersfuture.gov.sg/job/x/role-${n}` },
+      address: { districts: [{ location: 'X' }] },
+      postedCompany: { name: 'Co' },
+      title: `role ${n}`,
+    });
+    const fullPage = Array.from({ length: 100 }, (_, i) => record(i));
+    const shortPage = [record(100)];
+
+    const requestedUrls = [];
+    const fetched = await mycareersfuture.fetch(
+      { provider: 'mycareersfuture', name: 'Full page test', mycareersfuture: { keywords: ['developer'] } },
+      {
+        fetchJson: async (url) => {
+          requestedUrls.push(url);
+          const page = new URL(url).searchParams.get('page');
+          return { results: page === '1' ? shortPage : fullPage };
+        },
+      },
+    );
+
+    if (requestedUrls.length === 2) pass('mycareersfuture.fetch() paginates: a full (100-entry) page requests the next one');
+    else fail(`mycareersfuture.fetch() made ${requestedUrls.length} requests (expected 2): ${JSON.stringify(requestedUrls)}`);
+
+    if (fetched.length === 101) pass('mycareersfuture.fetch() stops after a short page and returns all collected jobs');
+    else fail(`mycareersfuture.fetch() returned ${fetched.length} jobs (expected 101)`);
+
+    if (new URL(requestedUrls[0]).searchParams.get('page') === '0' && new URL(requestedUrls[1]).searchParams.get('page') === '1') {
+      pass('mycareersfuture.fetch() advances pages via the URL query string, not the JSON body');
+    } else {
+      fail(`mycareersfuture.fetch() request pages were ${requestedUrls.map((u) => new URL(u).searchParams.get('page'))} (expected ["0","1"])`);
+    }
+  }
 } catch (e) {
   fail(`mycareersfuture provider tests crashed: ${e.message}`);
 }
