@@ -121,11 +121,19 @@ function tagText(block, tag) {
 // carry several <link> elements (e.g. a "self" link alongside "alternate");
 // the human-facing posting page is specifically the "alternate" one, so it is
 // preferred over whichever <link> happens to come first.
+//
+// XML attribute syntax permits single OR double quotes and whitespace around
+// `=` (this feed has only ever been observed using double quotes with none),
+// so both attribute matches accept either quote character and optional
+// spacing rather than assuming the one shape seen so far — a "self" link in
+// the feed's usual double-quoted form followed by an "alternate" link in the
+// (equally valid) single-quoted form must still be recognized as alternate,
+// not silently treated as unmarked and only won by list order.
 function linkHref(block) {
   const links = block.match(/<link\b[^>]*>/gi) || [];
-  const alternate = links.find((l) => /\brel="alternate"/i.test(l)) || links[0];
-  const m = alternate && alternate.match(/\bhref="([^"]*)"/i);
-  return m ? decodeEntities(m[1]).trim() : '';
+  const alternate = links.find((l) => /\brel\s*=\s*(["'])alternate\1/i.test(l)) || links[0];
+  const m = alternate && alternate.match(/\bhref\s*=\s*(["'])(.*?)\1/i);
+  return m ? decodeEntities(m[2]).trim() : '';
 }
 
 function cleanUrl(value) {
