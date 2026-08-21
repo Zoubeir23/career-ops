@@ -159,6 +159,25 @@ try {
     fail(`multi-link entry url = ${JSON.stringify(multiLinkJobs[0]?.url)}`);
   }
 
+  // XML permits single OR double quotes and whitespace around '=' — a "self"
+  // link in the feed's usual double-quoted form, followed by an "alternate"
+  // link that happens to use the (equally valid) single-quoted form, must
+  // still be recognized as alternate.
+  const mixedQuoteEntry = `<entry>
+    <title><![CDATA[mixed-quote link]]></title>
+    <link rel="self" href="https://www.jobbank.gc.ca/jobsearch/jobSearchRSSfeed?id=2"/>
+    <link rel='alternate' href='https://www.jobbank.gc.ca/jobsearch/jobposting/50999998'/>
+    <id>2</id>
+    <updated>2026-08-20T08:00:00Z</updated>
+    <summary><![CDATA[<strong>Location:</strong> X]]></summary>
+  </entry>`;
+  const mixedQuoteJobs = parseJobBankFeed(mixedQuoteEntry);
+  if (mixedQuoteJobs[0]?.url === 'https://www.jobbank.gc.ca/jobsearch/jobposting/50999998') {
+    pass('parseJobBankFeed recognizes a single-quoted rel="alternate" link after a double-quoted "self" link');
+  } else {
+    fail(`mixed-quote entry url = ${JSON.stringify(mixedQuoteJobs[0]?.url)}`);
+  }
+
   const attributedEntry = `<entry xml:lang="en">
     <title><![CDATA[attributed entry]]></title>
     <link rel="alternate" type="text/html" href="https://www.jobbank.gc.ca/jobsearch/jobposting/50888888"/>
