@@ -397,6 +397,46 @@ const PATHS = ['modes/', 'generate-cover-letter.mjs'];
   }
 }
 
+// ── 9h. The upstream-existence probe against a REAL repo: a path retired from
+//    SYSTEM_PATHS (present in the old install, gone from FETCH_HEAD) lists
+//    empty, so its checkout failure is a benign skip; a bad probe ref does not
+//    list empty, so a real checkout failure is not masked (#1998, #3824) ──
+{
+  const repo = makeRepo();
+  // 'modes/pdf.md' is in the tree; 'lib/retired.mjs' never was.
+  repo.g('fetch', '.', 'upstream'); // populate FETCH_HEAD
+
+  const present = repo.g('ls-tree', '--name-only', 'FETCH_HEAD', '--', 'modes/pdf.md').trim();
+  const absent = repo.g('ls-tree', '--name-only', 'FETCH_HEAD', '--', 'lib/retired.mjs').trim();
+
+  let badRefThrew = false;
+  try { repo.g('ls-tree', '--name-only', 'no-such-ref', '--', 'modes/pdf.md'); }
+  catch { badRefThrew = true; }
+
+  // apply()'s catch: absentUpstream is set ONLY from a successful empty listing.
+  const absentFromRetired = absent === '';                    // -> benign skip
+  const absentFromPresent = present === '';                   // -> false, rethrow
+  const absentFromBadProbe = badRefThrew ? false : true;      // throw -> false, rethrow
+
+  const realFailure = Object.assign(new Error('git checkout FETCH_HEAD -- modes/'), {
+    stderr: 'fatal: unable to write new index file\n',
+  });
+
+  const ok =
+    absentFromRetired === true &&
+    absentFromPresent === false &&
+    absentFromBadProbe === false &&
+    // wired through checkoutErrorIsBenign the way apply() composes them:
+    checkoutErrorIsBenign(realFailure, { absentUpstream: absentFromRetired, preservedState: false }) === true &&
+    checkoutErrorIsBenign(realFailure, { absentUpstream: absentFromBadProbe, preservedState: false }) === false;
+
+  if (ok) {
+    pass('the probe skips a retired path but never masks a real checkout failure (#1998, #3824)');
+  } else {
+    fail(`#9h retired=${absent === ''} present=${present === ''} badProbe=${absentFromBadProbe}`);
+  }
+}
+
 // ── 10. A system file the user DELETED locally is not "at risk" ──
 //    `git diff --name-only` lists deletions, so a deleted file landed in BOTH
 //    sets and therefore in atRisk. From there apply() preserved it — excluded

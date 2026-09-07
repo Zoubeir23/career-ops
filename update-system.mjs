@@ -2293,8 +2293,18 @@ async function apply() {
         // any file(s)" (#3824).
         const spec = path.endsWith('/') ? path.slice(0, -1) : path;
         let absentUpstream = false;
-        try { gitQuiet('cat-file', '-e', `FETCH_HEAD:${spec}`); }
-        catch { absentUpstream = true; }
+        try {
+          // Only a SUCCESSFUL empty listing is evidence the path is not in
+          // FETCH_HEAD: `git ls-tree <ref> -- <path>` prints the entry when it
+          // is present and nothing when it is not, both at exit 0. A THROW here
+          // (bad ref, unreadable repo, timeout) is the probe failing to run,
+          // not an answer — leave absentUpstream false so the real checkout
+          // error rethrows rather than being masked as a skip (#1998, #3824).
+          const listed = gitQuiet('ls-tree', '--name-only', 'FETCH_HEAD', '--', spec);
+          absentUpstream = listed.trim() === '';
+        } catch {
+          // probe could not run — not evidence the path is absent
+        }
         if (!checkoutErrorIsBenign(err, { absentUpstream, preservedState })) throw err;
         skippedPaths.push(path);
       }
