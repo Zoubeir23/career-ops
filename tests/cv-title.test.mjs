@@ -1,18 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { listTemplates } from '../cv-templates.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TEMPLATE_DIR = join(ROOT, 'templates');
 const BASE_TEMPLATE = join(TEMPLATE_DIR, 'cv-template.html');
 
-const ALL_TEMPLATES = readdirSync(TEMPLATE_DIR)
-  .filter((f) => /^cv-template(\.[a-z-]+)?\.html$/.test(f))
-  .map((f) => join(TEMPLATE_DIR, f));
+// listTemplates() is the same registry build-cv-html.mjs's callers resolve
+// names against, so this walks the flat cv-template*.html files AND one-level
+// packs (templates/ats/cv-template.ats.html) without hand-rolling a second
+// discovery rule that can drift from the real one (nikitacometa's #3763
+// review: a bare readdirSync + regex saw 7 files and reported "all 8" while
+// silently skipping the ats pack). resume-template.html sits outside this
+// registry by design — templates/README.md documents it as a hand-mirrored,
+// filename-invoked variant of cv-template.html, not a named/kind-resolved
+// template — so it is added explicitly rather than discovered.
+const ALL_TEMPLATES = [
+  ...listTemplates('cv', { dir: TEMPLATE_DIR, format: 'html' }).map((entry) => entry.path),
+  join(TEMPLATE_DIR, 'resume-template.html'),
+];
 
 function payload(title) {
   const candidate = { name: 'Test Candidate', email: 'test@example.com' };
