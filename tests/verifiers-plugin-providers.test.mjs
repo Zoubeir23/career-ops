@@ -84,6 +84,14 @@ const MINIMAL_TRACKER =
     mkdirSync(join(codeRoot, 'config'), { recursive: true });
     writeFileSync(join(codeRoot, 'config', 'plugins.yml'), 'plugins:\n  apify: { enabled: true }\n');
 
+    // verify-pipeline.mjs resolves CAREER_OPS via getCareerOpsRoot() and, past
+    // the tracker, mkdir's/reads real-looking data/reports paths under it
+    // (line 54 `mkdirSync(join(CAREER_OPS, 'data'), ...)`). The spawn below
+    // inherits the full process.env, so a developer's own CAREER_OPS_ROOT
+    // would otherwise leak in and the check would touch their real checkout.
+    const dataRoot = join(tmp, 'data-root');
+    mkdirSync(dataRoot, { recursive: true });
+
     const tracker = join(tmp, 'applications.md');
     writeFileSync(tracker, MINIMAL_TRACKER);
 
@@ -98,7 +106,13 @@ const MINIMAL_TRACKER =
         return {
           out: execFileSync(NODE, [join(codeRoot, script), ...extraArgs], {
             cwd: codeRoot, encoding: 'utf8', timeout: 60000, stdio: ['pipe', 'pipe', 'pipe'],
-            env: { ...process.env, CAREER_OPS_PORTALS: portals, CAREER_OPS_TRACKER: tracker, APIFY_TOKEN: '' },
+            env: {
+              ...process.env,
+              CAREER_OPS_ROOT: dataRoot,
+              CAREER_OPS_PORTALS: portals,
+              CAREER_OPS_TRACKER: tracker,
+              APIFY_TOKEN: '',
+            },
           }),
           code: 0,
         };
