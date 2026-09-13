@@ -56,3 +56,40 @@ expectCount(
   "pass('a'); fail('b');",
   2,
 );
+
+// ── A template literal's ${...} interpolations are executable code, not
+//    text: `${pass('inline')}` really does call pass(). Treating the whole
+//    template as inert (the earlier version of this scanner did, since
+//    backtick strings shared the same drop-everything state as '/") as
+//    quotes) undercounted any suite that asserts from inside one
+//    (CodeRabbit, #3976 review). ──
+expectCount(
+  'a pass() call inside a template-literal interpolation is counted',
+  "pass(`${pass('inline')} suffix`);",
+  2,
+);
+expectCount(
+  'plain template text containing the literal "pass(" (no interpolation) is still not counted',
+  'const s = `see pass(fake) here`;',
+  0,
+);
+expectCount(
+  'a template nested inside an interpolation is scanned as code at both levels',
+  "fail(`outer ${ `inner ${pass('deep')}` }`);",
+  2,
+);
+expectCount(
+  "an interpolation's own brace depth is tracked, so an inner { } does not close it early",
+  "pass(`${ (function(){ if(true){pass('x');} return 1; })() }`);",
+  2,
+);
+expectCount(
+  'a // comment inside an interpolation is still stripped as a comment, not template text',
+  "pass(`${ // pass('fake in comment')\n 1 }`);",
+  1,
+);
+expectCount(
+  "a string inside an interpolation containing literal 'pass(' text is stripped as a string, not counted",
+  "pass(`${ 'pass(not real)' }`);",
+  1,
+);
