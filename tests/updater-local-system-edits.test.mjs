@@ -385,13 +385,19 @@ const PATHS = ['modes/', 'generate-cover-letter.mjs'];
     checkoutErrorIsBenign(cancelOut, { absentUpstream: false, preservedState: 'unknown' }) === true &&
     // 'unknown' + a real failure → still rethrown
     checkoutErrorIsBenign(realFailure, { absentUpstream: false, preservedState: 'unknown' }) === false &&
-    // a genuinely absent path stays benign regardless of the message
-    checkoutErrorIsBenign(realFailure, { absentUpstream: true, preservedState: false }) === true &&
+    // a genuinely absent path does NOT soften an unrelated real failure — the
+    // cancel-out message must actually be present too (CodeRabbit, #3955
+    // review): absentUpstream/preservedState explain why nothing would be
+    // left to check out, they are not a license to swallow any error that
+    // happens to arrive on an absent path.
+    checkoutErrorIsBenign(realFailure, { absentUpstream: true, preservedState: false }) === false &&
+    // the same absent path WITH the actual cancel-out message is still benign
+    checkoutErrorIsBenign(cancelOut, { absentUpstream: true, preservedState: false }) === true &&
     // 'false' (real content not preserved) never softens a cancel-out message
     checkoutErrorIsBenign(cancelOut, { absentUpstream: false, preservedState: false }) === false;
 
   if (ok) {
-    pass('checkoutErrorIsBenign: cancel-out is benign only for an "unknown" directory, real failures still abort');
+    pass('checkoutErrorIsBenign: benign only when git\'s own cancel-out message is present, real failures always abort');
   } else {
     fail('#9g checkoutErrorIsBenign did not gate the cancel-out message correctly');
   }
@@ -417,8 +423,16 @@ const PATHS = ['modes/', 'generate-cover-letter.mjs'];
     git: () => { throw new Error('fatal: not a git repository'); },
   });
 
+  // An index-write failure has nothing to do with the pathspec being
+  // cancelled out — absentUpstream/preservedState explain why a path would
+  // legitimately have nothing to check out, they do not turn an unrelated
+  // real error into that shape (CodeRabbit, #3955 review). checkoutErrorIsBenign
+  // must require git's own cancel-out message before it ever looks at those.
   const realCheckoutFailure = Object.assign(new Error('git checkout FETCH_HEAD -- modes/'), {
     stderr: 'fatal: unable to write new index file\n',
+  });
+  const cancelledOutFailure = Object.assign(new Error('git checkout FETCH_HEAD -- retired/'), {
+    stderr: "error: pathspec 'retired/' did not match any file(s) known to git\n",
   });
 
   const ok =
@@ -426,11 +440,16 @@ const PATHS = ['modes/', 'generate-cover-letter.mjs'];
     presentIsAbsent === false &&
     throwingProbe === false &&
     // composed the way apply()'s catch does: retired path → skip, throwing probe → rethrow
-    checkoutErrorIsBenign(realCheckoutFailure, { absentUpstream: retiredIsAbsent, preservedState: false }) === true &&
-    checkoutErrorIsBenign(realCheckoutFailure, { absentUpstream: throwingProbe, preservedState: false }) === false;
+    // An unrelated real failure (index corruption) rethrows even when the
+    // path is genuinely absent upstream — absentUpstream alone is not enough.
+    checkoutErrorIsBenign(realCheckoutFailure, { absentUpstream: retiredIsAbsent, preservedState: false }) === false &&
+    checkoutErrorIsBenign(realCheckoutFailure, { absentUpstream: throwingProbe, preservedState: false }) === false &&
+    // The actual cancel-out message, paired with the path genuinely being
+    // absent, is still the one shape that skips.
+    checkoutErrorIsBenign(cancelledOutFailure, { absentUpstream: retiredIsAbsent, preservedState: false }) === true;
 
   if (ok) {
-    pass('probeAbsentUpstream: a retired path skips, a present path and a throwing probe both rethrow');
+    pass('probeAbsentUpstream: a retired path skips only on the real cancel-out message; an unrelated failure always rethrows');
   } else {
     fail(`#9h retired=${retiredIsAbsent} present=${presentIsAbsent} throwing=${throwingProbe}`);
   }

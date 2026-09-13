@@ -1343,10 +1343,16 @@ const PATHSPEC_CANCELLED_RE = /did not match any file/i;
  * @returns {boolean}
  */
 export function checkoutErrorIsBenign(err, { absentUpstream, preservedState }) {
-  if (absentUpstream) return true;
-  if (preservedState !== 'unknown') return false;
+  // absentUpstream/preservedState prove WHY a checkout of this path would
+  // legitimately have nothing to check out — they say nothing about whether
+  // THIS error is that. Requiring git's own pathspec-cancellation message
+  // first (CodeRabbit, #3955) means an absent path with an unrelated real
+  // failure — a corrupted index, a permissions error, a timeout — still
+  // rethrows instead of being swallowed just because the path happens to be
+  // gone from FETCH_HEAD too.
   const text = `${(err && err.stderr) || ''}\n${(err && err.message) || ''}`;
-  return PATHSPEC_CANCELLED_RE.test(text);
+  if (!PATHSPEC_CANCELLED_RE.test(text)) return false;
+  return absentUpstream || preservedState === 'unknown';
 }
 
 /**
