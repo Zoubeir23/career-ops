@@ -186,6 +186,26 @@ export function parseDate(dateStr) {
 // silently fell back to the evaluation date — the exact wrong-age failure this
 // lookup exists to prevent. The leading \b still refuses "reapplied".
 //
+// A bounded gap between "applied" and the date covers the channel phrasing
+// career-ops' own apply modes write — "Applied via Ashby 2026-08-31",
+// "Applied on 2026-08-25 via Ashby" — which the original adjacent-only match
+// missed entirely, silently degrading to the evaluation-date fallback on the
+// exact notes this project generates (#4084). Bounded to 40 chars and unable
+// to cross a `.`/`;`/newline so it cannot reach into a neighbouring sentence
+// or a different requisition's date; isCrossReferencedMention below reuses the
+// same source so its "does the citation already have a date" check stays in
+// sync with what this one actually matches.
+//
+// Two RegExp objects, not one shared global one: matchAll() below iterates
+// safely regardless of flags, but isCrossReferencedMention calls .test() on
+// its own copy, and a `g`-flagged regex's .test() mutates lastIndex on the
+// object it's called on — sharing one instance between an iterated matchAll()
+// caller and a repeated .test() caller would make the second, unrelated call
+// silently skip matches depending on where the first left lastIndex.
+const APPLIED_DATE_SOURCE = String.raw`\bapplied\b[^.;\n]{0,40}?\s~?(\d{4}-\d{2}-\d{2})(?![\w-])`;
+const APPLIED_DATE_RE = new RegExp(APPLIED_DATE_SOURCE, 'gi');
+const APPLIED_DATE_HAS_DATE_RE = new RegExp(APPLIED_DATE_SOURCE, 'i');
+
 // The trailing (?![\w-]) is the mirror of that leading \b: without it a
 // malformed value ("2026-06-091", "2026-06-09-2026-06-10") is truncated to a
 // plausible-looking date and then reported as a *measured* apply date. That is
@@ -216,7 +236,7 @@ export function parseAppliedDate(notes, options = {}) {
   const text = String(notes);
 
   const matches = [];
-  for (const m of text.matchAll(/\bapplied\s+~?(\d{4}-\d{2}-\d{2})(?![\w-])/gi)) {
+  for (const m of text.matchAll(APPLIED_DATE_RE)) {
     if (!validateCalendar || isRealCalendarDate(m[1])) matches.push({ date: m[1], index: m.index });
   }
   if (matches.length === 0) return null;
@@ -350,7 +370,7 @@ function isCrossReferencedMention(text, index) {
   const lastSeparator = [...sinceRef.matchAll(/[;|]/g)].pop();
   if (lastSeparator) {
     const beforeSeparator = sinceRef.slice(0, lastSeparator.index);
-    if (/\bapplied\s+~?\d{4}-\d{2}-\d{2}/i.test(beforeSeparator)) return false;
+    if (APPLIED_DATE_HAS_DATE_RE.test(beforeSeparator)) return false;
   }
   return true;
 }
