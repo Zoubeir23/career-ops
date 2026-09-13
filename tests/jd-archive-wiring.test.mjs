@@ -150,12 +150,39 @@ try {
   // in the file body. Flagging the alias's creation — not just a subsequent
   // call through it — closes the gap regardless of whether the alias is ever
   // invoked: holding the capability outside runSelfTest is the violation.
-  const REBIND_RE = /\b(?:const|let|var)\s+\w+\s*=\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\b/g;
+  //
+  // \(*\s*NAME\s*\)* (not just \s*NAME\b): a parenthesized initializer —
+  // `const write = (writeFileSync);` — is still a rebinding, and the bare
+  // version below missed it entirely since `(writeFileSync)` never matches
+  // `=\s*writeFileSync\b` (CodeRabbit, #4159 review).
+  const REBIND_RE = /\b(?:const|let|var)\s+\w+\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\s*\)*\b/g;
   const rebindings = [...codeOutsideSelfTest.matchAll(REBIND_RE)].map((m) => m[0].trim());
   if (rebindings.length === 0) {
     pass('check-jd-archive.mjs never locally re-binds a write-capable fs API outside its own self-test fixtures');
   } else {
     fail(`check-jd-archive.mjs re-binds a write-capable fs API outside runSelfTest: ${rebindings.join(' | ')}`);
+  }
+
+  // REBIND_RE itself, against literal fixtures — the real file has no
+  // rebinding to exercise the positive case against, so this pins the
+  // pattern's own behavior directly rather than only ever proving the
+  // negative ("the real file is clean") (CodeRabbit, #4159 review: add a
+  // regression case for the parenthesized-initializer alias form).
+  const rebindFixtureCases = [
+    ["const write = writeFileSync;", true, 'bare initializer'],
+    ["const write = (writeFileSync);", true, 'single-parenthesized initializer'],
+    ["const write = ((writeFileSync));", true, 'double-parenthesized initializer'],
+    ["const write = ( writeFileSync );", true, 'parenthesized with inner spaces'],
+    ["const notReal = writeFileSyncButLonger;", false, 'a longer identifier merely prefixed by the name'],
+    ["someOtherThing(writeFileSync);", false, 'passed as a call argument, not assigned — a different code shape'],
+  ];
+  const rebindFixtureFailures = rebindFixtureCases
+    .filter(([src, expectMatch]) => (new RegExp(REBIND_RE.source).test(src)) !== expectMatch)
+    .map(([src, expectMatch, label]) => `${label} (expected match=${expectMatch}): ${src}`);
+  if (rebindFixtureFailures.length === 0) {
+    pass('REBIND_RE matches bare and parenthesized initializers alike, without false-positiving on a longer identifier or a call argument');
+  } else {
+    fail(`REBIND_RE fixture mismatch: ${rebindFixtureFailures.join(' | ')}`);
   }
 
   if (!/from\s*['"](?:node:)?fs\/promises['"]/.test(jdArchiveSrc)) {
