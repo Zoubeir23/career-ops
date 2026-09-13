@@ -1991,6 +1991,14 @@ const allowedFiles = [
   // Dashboard credit string
   'dashboard/internal/ui/screens/pipeline.go',
   'dashboard/internal/ui/screens/progress.go',
+  'dashboard/internal/ui/screens/stats.go',
+  // GitHub Sponsors funding target + Codex plugin manifest (#4131) — same
+  // maintainer-credit shape as the .claude-plugin/.github/plugin ones above.
+  'funding.json', '.codex-plugin/plugin.json',
+  // Hired Wall: celebrates a hire with a link back to the project, and the
+  // scripts/tests that build and cover that feature necessarily carry the
+  // same URL (#4131).
+  'HIRED.md', 'hired-wall-build.mjs', 'tests/hired-wall.test.mjs', 'tests/project-identity.test.mjs',
 ];
 
 // Build pathspec for git grep — only scan tracked files matching these
