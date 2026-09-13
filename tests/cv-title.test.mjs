@@ -60,6 +60,19 @@ test('no title emits no .header-title element and leaves no placeholder', () => 
   }
 });
 
+test('no title leaves no blank line where the slot sat (byte-identical to before, CodeRabbit #3763)', () => {
+  // Matching only the {{TITLE_BLOCK}} token (as every other placeholder does)
+  // would remove the token but leave its own line — an indented, now-empty
+  // line — between the name and whatever follows it. h1 must be immediately
+  // followed by its next real line, with no blank line in between.
+  const html = render(payload());
+  // [ \t]*, not \s*: \s would also match the blank line's own trailing
+  // newline and keep scanning past it, silently passing on the very bug this
+  // pins. Only inline whitespace may sit between the h1's newline and the
+  // next real character.
+  assert.match(html, /<h1>Test Candidate<\/h1>\n[ \t]*\S/, 'no blank line survives between the name and the next element');
+});
+
 test('title text is HTML-escaped (no markup injection through the headline)', () => {
   const html = render(payload('Dev <script>alert(1)</script> & "Lead"'));
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
