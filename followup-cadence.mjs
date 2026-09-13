@@ -190,19 +190,20 @@ export function parseDate(dateStr) {
 // career-ops' own apply modes write — "Applied via Ashby 2026-08-31",
 // "Applied on 2026-08-25 via Ashby" — which the original adjacent-only match
 // missed entirely, silently degrading to the evaluation-date fallback on the
-// exact notes this project generates (#4084). Bounded to 40 chars and unable
-// to cross a `.`/`;`/newline so it cannot reach into a neighbouring sentence
-// or a different requisition's date; isCrossReferencedMention below reuses the
-// same source so its "does the citation already have a date" check stays in
-// sync with what this one actually matches.
+// exact notes this project generates (#4084). Bounded to 40 chars total and
+// unable to cross a `.`/`;`/line break so it cannot reach into a neighbouring
+// sentence or a different requisition's date; isCrossReferencedMention below
+// reuses the same source so its "does the citation already have a date" check
+// stays in sync with what this one actually matches.
 //
-// Two RegExp objects, not one shared global one: matchAll() below iterates
-// safely regardless of flags, but isCrossReferencedMention calls .test() on
-// its own copy, and a `g`-flagged regex's .test() mutates lastIndex on the
-// object it's called on — sharing one instance between an iterated matchAll()
-// caller and a repeated .test() caller would make the second, unrelated call
-// silently skip matches depending on where the first left lastIndex.
-const APPLIED_DATE_SOURCE = String.raw`\bapplied\b[^.;\n]{0,40}?\s~?(\d{4}-\d{2}-\d{2})(?![\w-])`;
+// The {0,39} quantifier, not {0,40}: the mandatory \s right after it is part
+// of the gap too, so the true maximum distance between "applied" and the date
+// is quantifier-plus-one. Excluding \r and the Unicode line/paragraph
+// separators (U+2028, U+2029) alongside \n covers JS's own line-terminator
+// set (ECMA-262 11.3), so a note carrying one of those instead of \n is still
+// treated as a line break rather than silently letting the gap cross it
+// (CodeRabbit, #4143).
+const APPLIED_DATE_SOURCE = String.raw`\bapplied\b[^.;\r\n\u2028\u2029]{0,39}?\s~?(\d{4}-\d{2}-\d{2})(?![\w-])`;
 const APPLIED_DATE_RE = new RegExp(APPLIED_DATE_SOURCE, 'gi');
 const APPLIED_DATE_HAS_DATE_RE = new RegExp(APPLIED_DATE_SOURCE, 'i');
 

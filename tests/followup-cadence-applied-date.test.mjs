@@ -65,6 +65,34 @@ expectDate(
   '"applied" with no date after it at all still returns null',
 );
 
+// ── Exact boundary: the gap plus its mandatory trailing whitespace must total
+//    40 chars, not 41 (CodeRabbit, #4143 — the {0,39} quantifier accounts for
+//    the \s that follows it). ──
+expectDate(
+  `Applied${' '.repeat(40)}2026-08-31`, '2026-08-31',
+  'a gap totalling exactly 40 chars (including the mandatory trailing space) still matches',
+);
+expectDate(
+  `Applied${' '.repeat(41)}2026-08-31`, null,
+  'a gap totalling 41 chars — one past the documented bound — no longer matches',
+);
+
+// ── Line-terminator boundary: a bare \r or a Unicode line/paragraph separator
+//    must stop the gap exactly like \n does, not just LF (CodeRabbit, #4143 —
+//    ECMA-262's line-terminator set is \n, \r, U+2028, U+2029). ──
+expectDate(
+  'Applied via Ashby\rNote: something\r2026-08-31', null,
+  'a bare "\\r" (no accompanying "\\n") still ends the gap',
+);
+expectDate(
+  `Applied via Ashby${String.fromCharCode(0x2028)}Note${String.fromCharCode(0x2028)}2026-08-31`, null,
+  'a Unicode line separator (U+2028) still ends the gap',
+);
+expectDate(
+  `Applied via Ashby${String.fromCharCode(0x2029)}Note${String.fromCharCode(0x2029)}2026-08-31`, null,
+  'a Unicode paragraph separator (U+2029) still ends the gap',
+);
+
 // ── Cross-reference filtering must stay in sync with the wider matcher: a
 //    cited row's OWN date, written with the same gapped phrasing, must still
 //    be recognized as "the citation already has a date" so the date after the
