@@ -24,3 +24,14 @@ test('strict:true with no restricting tier is inert; block-only strict fails clo
   assert.equal(strictBlockOnly('', undefined), false, 'block-only strict cannot confirm an empty location is safe');
   assert.equal(strictBlockOnly('Berlin, Germany', undefined), true);
 });
+
+test('block_hard-only strict also fails closed on empty locations (CodeRabbit, #4033)', () => {
+  // block_hard is a separate restricting tier from block (scan.mjs:519,524) —
+  // always_allow cannot override it, unlike block. A config using only
+  // block_hard must fail closed under strict the same way block-only does.
+  const strictBlockHardOnly = buildLocationFilter({ block_hard: ['india'], strict: true });
+
+  assert.equal(strictBlockHardOnly('', undefined), false, 'block_hard-only strict cannot confirm an empty location is safe');
+  assert.equal(strictBlockHardOnly('Berlin, Germany', undefined), true, 'strict preserves a location that does not match block_hard');
+  assert.equal(strictBlockHardOnly('Mumbai, India', undefined), false, 'block_hard itself still rejects a real match');
+});
