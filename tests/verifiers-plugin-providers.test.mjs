@@ -109,6 +109,14 @@ const MINIMAL_TRACKER =
             env: {
               ...process.env,
               CAREER_OPS_ROOT: dataRoot,
+              // Explicitly undefined (not omitted): a bare ...process.env
+              // spread would otherwise leak the developer's own
+              // CAREER_OPS_REPORTS in unchanged, and verify-pipeline.mjs
+              // resolves it as an absolute-or-relative-to-CAREER_OPS override
+              // that wins over dataRoot entirely (CodeRabbit, #4046). An
+              // undefined value drops the key from the child's env, so
+              // verify-pipeline.mjs falls back to its default, dataRoot/reports.
+              CAREER_OPS_REPORTS: undefined,
               CAREER_OPS_PORTALS: portals,
               CAREER_OPS_TRACKER: tracker,
               APIFY_TOKEN: '',
