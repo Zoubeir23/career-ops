@@ -93,6 +93,26 @@ expectDate(
   'a Unicode paragraph separator (U+2029) still ends the gap',
 );
 
+// ── Sentence-boundary punctuation: "?" and "!" must stop the gap exactly like
+//    "." does, not just "." (CodeRabbit, second round on #4143). ──
+expectDate('Applied? 2026-08-31', null, 'a "?" sentence break still stops the match');
+expectDate('Applied! 2026-08-31', null, 'a "!" sentence break still stops the match');
+
+// ── The mandatory separator itself must not be a line terminator: \s matches
+//    \r/\n/U+2028/U+2029 same as a space, so excluding them only from the gap
+//    (not the separator) would have left this one case still crossing a line
+//    break (CodeRabbit, second round on #4143). ──
+expectDate('Applied via Ashby\n2026-08-31', null, 'a "\\n" used AS the mandatory separator still stops the match');
+expectDate('Applied via Ashby\r2026-08-31', null, 'a "\\r" used AS the mandatory separator still stops the match');
+expectDate(
+  `Applied via Ashby${String.fromCharCode(0x2028)}2026-08-31`, null,
+  'a U+2028 used AS the mandatory separator still stops the match',
+);
+expectDate(
+  `Applied via Ashby${String.fromCharCode(0x2029)}2026-08-31`, null,
+  'a U+2029 used AS the mandatory separator still stops the match',
+);
+
 // ── Cross-reference filtering must stay in sync with the wider matcher: a
 //    cited row's OWN date, written with the same gapped phrasing, must still
 //    be recognized as "the citation already has a date" so the date after the
