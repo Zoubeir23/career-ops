@@ -131,14 +131,31 @@ try {
     }
     selfTestBody = jdArchiveSrc.slice(openBrace, i + 1);
   }
-  const outsideSelfTest = jdArchiveSrc
-    .replace(selfTestBody, '')
+  const codeOutsideSelfTest = jdArchiveSrc.replace(selfTestBody, '');
+  const outsideSelfTest = codeOutsideSelfTest
     .split('\n')
     .filter(line => [...SELF_TEST_ONLY_FS].some(fn => line.includes(`${fn}(`)) && !/^\s*import\b/.test(line));
   if (outsideSelfTest.length === 0) {
     pass('check-jd-archive.mjs never calls a write-capable fs API outside its own self-test fixtures');
   } else {
     fail(`check-jd-archive.mjs calls a write-capable fs API outside runSelfTest: ${outsideSelfTest.join(' | ')}`);
+  }
+
+  // The by-name call scan above is blind to a local re-binding — `const write
+  // = writeFileSync; write(dest, data)` never contains the literal substring
+  // `writeFileSync(`, so a write through the alias sits outside runSelfTest
+  // invisibly (#3936). The import-list check already rejects an import-time
+  // alias (`writeFileSync as wfs`, since that exact string isn't in either
+  // allowed set), so the remaining gap is specifically a NEW binding created
+  // in the file body. Flagging the alias's creation — not just a subsequent
+  // call through it — closes the gap regardless of whether the alias is ever
+  // invoked: holding the capability outside runSelfTest is the violation.
+  const REBIND_RE = /\b(?:const|let|var)\s+\w+\s*=\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\b/g;
+  const rebindings = [...codeOutsideSelfTest.matchAll(REBIND_RE)].map((m) => m[0].trim());
+  if (rebindings.length === 0) {
+    pass('check-jd-archive.mjs never locally re-binds a write-capable fs API outside its own self-test fixtures');
+  } else {
+    fail(`check-jd-archive.mjs re-binds a write-capable fs API outside runSelfTest: ${rebindings.join(' | ')}`);
   }
 
   if (!/from\s*['"](?:node:)?fs\/promises['"]/.test(jdArchiveSrc)) {
