@@ -55,9 +55,10 @@ import { tmpdir } from 'os';
 import { promisify } from 'util';
 import { fileURLToPath, pathToFileURL } from 'url';
 import * as yaml from 'js-yaml';
-import { pass, fail, warn, run, runAcrossUtcDay, lastRunFailure, formatRunFailure, fileExists, finish, ROOT, QUICK, NODE, DEFAULT_SCRIPT_TIMEOUT_MS, getBash, toBashPath, hermeticGitEnv } from './tests/helpers.mjs';
+import { pass, fail, warn, run, runAcrossUtcDay, lastRunFailure, formatRunFailure, fileExists, finish, results, ROOT, QUICK, NODE, DEFAULT_SCRIPT_TIMEOUT_MS, getBash, toBashPath, hermeticGitEnv } from './tests/helpers.mjs';
 import { flagValue, hasFlag } from './lib/cli-flags.mjs';
 import { collectMjsFiles, isNestedCheckout, isUnderNestedCheckout } from './lib/mjs-files.mjs';
+import { countAssertionCallSites } from './lib/count-assertion-call-sites.mjs';
 
 /**
  * Read a repo-relative text file as UTF-8.
@@ -195,10 +196,24 @@ async function runDiscovered(filter = null) {
     // checks with it, with no verdict line at all — #2828.) A discovered suite
     // is a guest, not a co-host: its crash is one failure, not the end of the
     // run.
+    const before = results();
     try {
       await import(pathToFileURL(f).href);
     } catch (err) {
+      const ran = (results().passed - before.passed) + (results().failed - before.failed);
       fail(`${rel} — suite threw and was contained (${err?.code ?? err?.name ?? 'Error'}): ${err?.message ?? err}`);
+      // How much this counts as "one failure" actually cost: the reported
+      // totals only ever include the `ran` assertions above, and nothing else
+      // says the rest never happened — on one platform a suite's crash reads
+      // as one broken assertion, on another the same file's assertions run
+      // and pass, and the two summaries look the same shape (#3976). The
+      // comparison is a static, comment-stripped call-site count, so it is an
+      // approximation, not a trace — hedged with "~" and named as such.
+      const expected = countAssertionCallSites(src);
+      const lost = expected - ran;
+      if (lost > 0) {
+        console.log(`      ${ran} of ~${expected} pass()/fail() call sites in this file ran before the throw — ~${lost} more never executed and are counted nowhere above`);
+      }
       // The throw site, not just the message: a suite that dies mid-import
       // leaves no other clue how far it got.
       for (const line of String(err?.stack ?? '').split('\n').slice(1, 4)) {
