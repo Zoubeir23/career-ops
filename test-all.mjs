@@ -2025,14 +2025,24 @@ const grepPathspecs = scanExtensions.map(e => `*.${e}`);
 
 let leakFound = false;
 for (const pattern of leakPatterns) {
+  // -z NUL-delimits the filename field instead of `:` (git's default match
+  // separator): a tracked path containing a literal colon — legal on Linux
+  // and macOS — otherwise gets truncated by a plain `line.split(':')[0]` at
+  // the first colon INSIDE the filename, before the real separator. A
+  // truncated name that happens to collide with an allowed one (or with the
+  // empty string) would then skip the warning for whatever the file actually
+  // leaks (CodeRabbit, #4144 review). The match content itself still ends
+  // each record with a real newline, so splitting on '\n' first and then
+  // taking the text before the first '\0' recovers the exact filename.
   const result = run(
     'git',
-    ['grep', '-n', pattern, '--', ...grepPathspecs],
+    ['grep', '-n', '-z', pattern, '--', ...grepPathspecs],
     { stdio: ['pipe', 'pipe', 'ignore'] }
   );
   if (result) {
     for (const line of result.split('\n')) {
-      const file = line.split(':')[0];
+      if (!line) continue;
+      const file = line.split('\0')[0];
       if (allowedFiles.some(a => file.includes(a))) continue;
       if (exactAllowedFiles.has(file)) continue;
       if (file.includes('dashboard/go.mod')) continue;
