@@ -58,7 +58,6 @@ import * as yaml from 'js-yaml';
 import { pass, fail, warn, run, runAcrossUtcDay, lastRunFailure, formatRunFailure, fileExists, finish, results, ROOT, QUICK, NODE, DEFAULT_SCRIPT_TIMEOUT_MS, getBash, toBashPath, hermeticGitEnv } from './tests/helpers.mjs';
 import { flagValue, hasFlag } from './lib/cli-flags.mjs';
 import { collectMjsFiles, isNestedCheckout, isUnderNestedCheckout } from './lib/mjs-files.mjs';
-import { countAssertionCallSites } from './lib/count-assertion-call-sites.mjs';
 
 /**
  * Read a repo-relative text file as UTF-8.
@@ -206,14 +205,28 @@ async function runDiscovered(filter = null) {
       // totals only ever include the `ran` assertions above, and nothing else
       // says the rest never happened — on one platform a suite's crash reads
       // as one broken assertion, on another the same file's assertions run
-      // and pass, and the two summaries look the same shape (#3976). The
-      // comparison is a static, comment-stripped call-site count, so it is an
-      // approximation, not a trace — hedged with "~" and named as such.
-      const expected = countAssertionCallSites(src);
-      const lost = expected - ran;
-      if (lost > 0) {
-        console.log(`      ${ran} of ~${expected} pass()/fail() call sites in this file ran before the throw — ~${lost} more never executed and are counted nowhere above`);
-      }
+      // and pass, and the two summaries look the same shape (#3976).
+      //
+      // An earlier version of this line also estimated how many assertions
+      // never ran, from a static count of pass()/fail() call sites in the
+      // file. artemtrofymenko (the issue's author) measured that estimate
+      // against real suites and found it wrong in both directions badly
+      // enough to make the diagnostic worse than none: a suite asserting
+      // through a local wrapper (`function ok(cond) { if (cond) pass(...)
+      // else fail(...) }`) has far more real assertions than call sites
+      // (tests/discover-ats.test.mjs: 155 executed, 4 call sites — the
+      // estimate goes negative, `lost > 0` is false, and the line silently
+      // does not print, reverting to exactly the pre-fix silence for the
+      // suites this was built for — 38 of 278 in-process suites use this
+      // shape); a suite writing `if (cond) pass(...); else fail(...)` pairs
+      // has roughly twice as many call sites as real assertions
+      // (tests/providers/_http.test.mjs: ~2x), so the estimate invents lost
+      // assertions that never existed. A signal present for some suites and
+      // silently absent for others turns its own absence into a false
+      // reassurance — worse than never estimating at all. `ran` alone does
+      // not have that failure mode: it is an exact count in every case, so
+      // it is printed unconditionally instead.
+      console.log(`      ${ran} assertion${ran === 1 ? '' : 's'} ran before the throw; everything after it in this file did not run`);
       // The throw site, not just the message: a suite that dies mid-import
       // leaves no other clue how far it got.
       for (const line of String(err?.stack ?? '').split('\n').slice(1, 4)) {
