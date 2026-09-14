@@ -1992,6 +1992,19 @@ const allowedFiles = [
   'dashboard/internal/ui/screens/pipeline.go',
   'dashboard/internal/ui/screens/progress.go',
   'dashboard/internal/ui/screens/stats.go',
+];
+
+// Paths added for #4131, checked by EXACT match rather than folded into
+// allowedFiles above. allowedFiles.some(a => file.includes(a)) is a
+// substring test, which every pre-existing entry already relies on (a
+// nested path containing e.g. "README.md" is exempted too) — widening that
+// same list with plain root-relative basenames like 'funding.json' or
+// 'HIRED.md' would also silently exempt an unrelated tracked file that
+// merely shares a basename, such as a future fixtures/funding.json or
+// snapshots/tests/hired-wall.test.mjs (luochen211, #4144 review). These are
+// the ones this PR actually intends to allow, so they get the tighter
+// check instead of loosening the shared one.
+const exactAllowedFiles = new Set([
   // GitHub Sponsors funding target + Codex plugin manifest (#4131) — same
   // maintainer-credit shape as the .claude-plugin/.github/plugin ones above.
   'funding.json', '.codex-plugin/plugin.json',
@@ -1999,7 +2012,7 @@ const allowedFiles = [
   // scripts/tests that build and cover that feature necessarily carry the
   // same URL (#4131).
   'HIRED.md', 'hired-wall-build.mjs', 'tests/hired-wall.test.mjs', 'tests/project-identity.test.mjs',
-];
+]);
 
 // Build pathspec for git grep — only scan tracked files matching these
 // extensions. This is what `grep -rn` was trying to do, but git-aware:
@@ -2021,6 +2034,7 @@ for (const pattern of leakPatterns) {
     for (const line of result.split('\n')) {
       const file = line.split(':')[0];
       if (allowedFiles.some(a => file.includes(a))) continue;
+      if (exactAllowedFiles.has(file)) continue;
       if (file.includes('dashboard/go.mod')) continue;
       warn(`Possible personal data in ${file}: "${pattern}"`);
       leakFound = true;
