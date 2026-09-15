@@ -155,7 +155,12 @@ try {
   // `const write = (writeFileSync);` — is still a rebinding, and the bare
   // version below missed it entirely since `(writeFileSync)` never matches
   // `=\s*writeFileSync\b` (CodeRabbit, #4159 review).
-  const REBIND_RE = /\b(?:const|let|var)\s+\w+\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\s*\)*\b/g;
+  //
+  // [$A-Za-z_][$\w]* (not just \w+) for the declared name itself: `\w+`
+  // excludes `$`, so `const $write = writeFileSync;` rebound the capability
+  // to a valid JS identifier the pattern couldn't see (CodeRabbit, #4159
+  // review).
+  const REBIND_RE = /\b(?:const|let|var)\s+[$A-Za-z_][$\w]*\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\s*\)*\b/g;
   const rebindings = [...codeOutsideSelfTest.matchAll(REBIND_RE)].map((m) => m[0].trim());
   if (rebindings.length === 0) {
     pass('check-jd-archive.mjs never locally re-binds a write-capable fs API outside its own self-test fixtures');
@@ -173,6 +178,7 @@ try {
     ["const write = (writeFileSync);", true, 'single-parenthesized initializer'],
     ["const write = ((writeFileSync));", true, 'double-parenthesized initializer'],
     ["const write = ( writeFileSync );", true, 'parenthesized with inner spaces'],
+    ["const $write = writeFileSync;", true, '$-prefixed alias'],
     ["const notReal = writeFileSyncButLonger;", false, 'a longer identifier merely prefixed by the name'],
     ["someOtherThing(writeFileSync);", false, 'passed as a call argument, not assigned — a different code shape'],
   ];
