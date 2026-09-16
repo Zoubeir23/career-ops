@@ -160,7 +160,15 @@ try {
   // excludes `$`, so `const $write = writeFileSync;` rebound the capability
   // to a valid JS identifier the pattern couldn't see (CodeRabbit, #4159
   // review).
-  const REBIND_RE = /\b(?:const|let|var)\s+[$A-Za-z_][$\w]*\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\s*\)*\b/g;
+  //
+  // (?![$\w]) (not \b) to close the captured API name: `\b` is a boundary
+  // between a \w and a non-\w character, and `$` is NOT in \w — so
+  // `writeFileSync\b` still matches at the boundary right before a `$`,
+  // treating `const notReal = writeFileSync$helper;` as a rebinding of the
+  // real writeFileSync even though `writeFileSync$helper` is a distinct,
+  // unrelated identifier that merely starts with the same text (CodeRabbit,
+  // #4159 review).
+  const REBIND_RE = /\b(?:const|let|var)\s+[$A-Za-z_][$\w]*\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\s*\)*(?![$\w])/g;
   const rebindings = [...codeOutsideSelfTest.matchAll(REBIND_RE)].map((m) => m[0].trim());
   if (rebindings.length === 0) {
     pass('check-jd-archive.mjs never locally re-binds a write-capable fs API outside its own self-test fixtures');
@@ -180,6 +188,7 @@ try {
     ["const write = ( writeFileSync );", true, 'parenthesized with inner spaces'],
     ["const $write = writeFileSync;", true, '$-prefixed alias'],
     ["const notReal = writeFileSyncButLonger;", false, 'a longer identifier merely prefixed by the name'],
+    ["const notReal = writeFileSync$helper;", false, 'a $-suffixed identifier merely prefixed by the name'],
     ["someOtherThing(writeFileSync);", false, 'passed as a call argument, not assigned — a different code shape'],
   ];
   const rebindFixtureFailures = rebindFixtureCases
