@@ -2039,11 +2039,24 @@ for (const pattern of leakPatterns) {
   // #4144 review). `--name-only -z` sidesteps the ambiguity entirely: NUL is
   // the only delimiter, so a raw newline inside a filename is preserved
   // verbatim and splitting purely on '\0' recovers the exact path every time.
-  const result = run(
-    'git',
-    ['grep', '--name-only', '-z', pattern, '--', ...grepPathspecs],
-    { stdio: ['pipe', 'pipe', 'ignore'] }
-  );
+  //
+  // execFileSync() directly, NOT the shared run() helper: run()'s documented
+  // contract is "trimmed stdout" (tests/helpers.mjs), and .trim() strips
+  // whitespace from the very ends of the whole NUL-joined blob. A tracked
+  // filename that legitimately starts or ends with a space — legal on
+  // Linux/macOS — would have that space silently stripped if it happened to
+  // be the first or last match, corrupting the one thing this whole fix
+  // exists to keep exact (CodeRabbit, #4144 review).
+  let result = null;
+  try {
+    result = execFileSync(
+      'git',
+      ['grep', '--name-only', '-z', pattern, '--', ...grepPathspecs],
+      { cwd: ROOT, encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'ignore'] },
+    );
+  } catch {
+    // git grep exits 1 with no matches — nothing to warn about.
+  }
   if (result) {
     for (const file of result.split('\0')) {
       if (!file) continue;
