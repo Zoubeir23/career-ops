@@ -1991,7 +1991,6 @@ const allowedFiles = [
   // Dashboard credit string
   'dashboard/internal/ui/screens/pipeline.go',
   'dashboard/internal/ui/screens/progress.go',
-  'dashboard/internal/ui/screens/stats.go',
 ];
 
 // Paths added for #4131, checked by EXACT match rather than folded into
@@ -2012,6 +2011,10 @@ const exactAllowedFiles = new Set([
   // scripts/tests that build and cover that feature necessarily carry the
   // same URL (#4131).
   'HIRED.md', 'hired-wall-build.mjs', 'tests/hired-wall.test.mjs', 'tests/project-identity.test.mjs',
+  // Dashboard credit string (#4131) — same substring-vs-exact reasoning as
+  // the entries above; the pre-existing pipeline.go/progress.go entries stay
+  // in the broad allowedFiles list above since they predate this PR.
+  'dashboard/internal/ui/screens/stats.go',
 ]);
 
 // Build pathspec for git grep — only scan tracked files matching these
