@@ -166,12 +166,12 @@ try {
   const demoOffers = parseRecruiteeResponse(
     {
       offers: [
-        { title: 'Senior Marketer (Sample)', careers_url: 'https://adecco.recruitee.com/o/sample' },
-        { title: 'senior marketer (sample)', careers_url: 'https://adecco.recruitee.com/o/lowercase' },
-        { title: 'Real Backend Engineer', careers_url: 'https://adecco.recruitee.com/o/real' },
+        { title: 'Senior Marketer (Sample)', careers_url: 'https://exampleco.recruitee.com/o/sample' },
+        { title: 'senior marketer (sample)', careers_url: 'https://exampleco.recruitee.com/o/lowercase' },
+        { title: 'Real Backend Engineer', careers_url: 'https://exampleco.recruitee.com/o/real' },
       ],
     },
-    'Adecco',
+    'ExampleCo',
   );
   if (demoOffers.length === 1 && demoOffers[0].title === 'Real Backend Engineer') {
     pass('parseRecruiteeResponse drops any posting whose title carries the "(Sample)" marker, case-insensitively (#4190)');
