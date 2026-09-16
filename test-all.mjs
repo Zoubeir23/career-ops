@@ -2054,8 +2054,13 @@ for (const pattern of leakPatterns) {
       ['grep', '--name-only', '-z', pattern, '--', ...grepPathspecs],
       { cwd: ROOT, encoding: 'utf-8', timeout: 30000, stdio: ['pipe', 'pipe', 'ignore'] },
     );
-  } catch {
-    // git grep exits 1 with no matches — nothing to warn about.
+  } catch (error) {
+    // git grep exits 1 with no matches — nothing to warn about. Any other
+    // failure (a real git error, or the 30s timeout above firing) must not
+    // be swallowed the same way: silently treating it as "no matches" would
+    // let this whole check report a false "no leaks" on a run where it
+    // never actually completed (CodeRabbit, #4144 review).
+    if (error?.status !== 1) throw error;
   }
   if (result) {
     for (const file of result.split('\0')) {
