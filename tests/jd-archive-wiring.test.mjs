@@ -168,7 +168,18 @@ try {
   // real writeFileSync even though `writeFileSync$helper` is a distinct,
   // unrelated identifier that merely starts with the same text (CodeRabbit,
   // #4159 review).
-  const REBIND_RE = /\b(?:const|let|var)\s+[$A-Za-z_][$\w]*\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)\s*\)*(?![$\w])/g;
+  //
+  // \p{L}\p{N} (not just \w, and the 'u' flag to make \p{...} valid) for both
+  // the declared name and the closing boundary: `\w` is ASCII-only, so
+  // `const café = writeFileSync;` — a valid JS identifier alias — was
+  // invisible to the declaration-name class, and by the same gap
+  // `writeFileSyncö` would have slipped past `(?![$\w])` the same way
+  // `writeFileSync$helper` did before that fix, since `ö` is neither `$` nor
+  // `\w` either. A real ECMAScript identifier grammar has finer distinctions
+  // (astral-plane code points, ID_Start vs ID_Continue, ZWJ/ZWNJ) that
+  // `\p{L}\p{N}` doesn't fully cover, but it closes the reported gap without
+  // pulling in a parser for a two-line test guard (CodeRabbit, #4159 review).
+  const REBIND_RE = /\b(?:const|let|var)\s+[$_\p{L}][$\p{L}\p{N}]*\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)(?![$\p{L}\p{N}])\s*\)*/gu;
   const rebindings = [...codeOutsideSelfTest.matchAll(REBIND_RE)].map((m) => m[0].trim());
   if (rebindings.length === 0) {
     pass('check-jd-archive.mjs never locally re-binds a write-capable fs API outside its own self-test fixtures');
@@ -187,12 +198,19 @@ try {
     ["const write = ((writeFileSync));", true, 'double-parenthesized initializer'],
     ["const write = ( writeFileSync );", true, 'parenthesized with inner spaces'],
     ["const $write = writeFileSync;", true, '$-prefixed alias'],
+    ["const café = writeFileSync;", true, 'a valid Unicode (non-ASCII) JS identifier alias'],
     ["const notReal = writeFileSyncButLonger;", false, 'a longer identifier merely prefixed by the name'],
     ["const notReal = writeFileSync$helper;", false, 'a $-suffixed identifier merely prefixed by the name'],
+    ["const notReal = writeFileSyncö;", false, 'a Unicode-suffixed identifier merely prefixed by the name'],
     ["someOtherThing(writeFileSync);", false, 'passed as a call argument, not assigned — a different code shape'],
   ];
+  // REBIND_RE.flags (not a hardcoded 'g' or no flags at all): REBIND_RE now
+  // carries 'u' so \p{L}/\p{N} are valid property escapes rather than a
+  // SyntaxError or a literal "p". Reconstructing without it silently drops
+  // Unicode-mode semantics and breaks every fixture case, not just the new
+  // Unicode one — caught by this fix's own mutation test.
   const rebindFixtureFailures = rebindFixtureCases
-    .filter(([src, expectMatch]) => (new RegExp(REBIND_RE.source).test(src)) !== expectMatch)
+    .filter(([src, expectMatch]) => (new RegExp(REBIND_RE.source, REBIND_RE.flags).test(src)) !== expectMatch)
     .map(([src, expectMatch, label]) => `${label} (expected match=${expectMatch}): ${src}`);
   if (rebindFixtureFailures.length === 0) {
     pass('REBIND_RE matches bare and parenthesized initializers alike, without false-positiving on a longer identifier or a call argument');
