@@ -175,11 +175,22 @@ try {
   // invisible to the declaration-name class, and by the same gap
   // `writeFileSyncö` would have slipped past `(?![$\w])` the same way
   // `writeFileSync$helper` did before that fix, since `ö` is neither `$` nor
-  // `\w` either. A real ECMAScript identifier grammar has finer distinctions
-  // (astral-plane code points, ID_Start vs ID_Continue, ZWJ/ZWNJ) that
-  // `\p{L}\p{N}` doesn't fully cover, but it closes the reported gap without
-  // pulling in a parser for a two-line test guard (CodeRabbit, #4159 review).
-  const REBIND_RE = /\b(?:const|let|var)\s+[$_\p{L}][$\p{L}\p{N}]*\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)(?![$\p{L}\p{N}])\s*\)*/gu;
+  // `\w` either.
+  //
+  // \p{ID_Start}/\p{ID_Continue} (not \p{L}/\p{N}) plus an explicit `_`: the
+  // first cut at this fix dropped `_` from the continuation class entirely
+  // (`[$\p{L}\p{N}]*`, no `_`), so `const write_alias = writeFileSync;` (a
+  // real, common alias shape) went undetected, and `writeFileSync_helper`
+  // slipped past the closing boundary the same way `writeFileSync$helper`
+  // did before the `$` fix — `_` was simply forgotten, not excluded on
+  // purpose (CodeRabbit, #4159 review). `\p{ID_Start}`/`\p{ID_Continue}` are
+  // the Unicode properties the ECMAScript identifier grammar is actually
+  // defined against (JS additionally allows `$`, `_`, and <ZWNJ>/<ZWJ> in
+  // continuation position, included explicitly below). This still isn't a
+  // full parser — astral-plane code points beyond what `\p{...}` covers here
+  // are out of scope for a two-line test guard — but it now matches the
+  // grammar's own vocabulary instead of an ad hoc `\p{L}\p{N}` guess.
+  const REBIND_RE = /\b(?:const|let|var)\s+[$_\p{ID_Start}][$_\u200C\u200D\p{ID_Continue}]*\s*=\s*\(*\s*(mkdtempSync|mkdirSync|writeFileSync|rmSync)(?![$_\u200C\u200D\p{ID_Continue}])\s*\)*/gu;
   const rebindings = [...codeOutsideSelfTest.matchAll(REBIND_RE)].map((m) => m[0].trim());
   if (rebindings.length === 0) {
     pass('check-jd-archive.mjs never locally re-binds a write-capable fs API outside its own self-test fixtures');
@@ -199,9 +210,11 @@ try {
     ["const write = ( writeFileSync );", true, 'parenthesized with inner spaces'],
     ["const $write = writeFileSync;", true, '$-prefixed alias'],
     ["const café = writeFileSync;", true, 'a valid Unicode (non-ASCII) JS identifier alias'],
+    ["const write_alias = writeFileSync;", true, 'an underscore-containing alias, a common real-world shape'],
     ["const notReal = writeFileSyncButLonger;", false, 'a longer identifier merely prefixed by the name'],
     ["const notReal = writeFileSync$helper;", false, 'a $-suffixed identifier merely prefixed by the name'],
     ["const notReal = writeFileSyncö;", false, 'a Unicode-suffixed identifier merely prefixed by the name'],
+    ["const notReal = writeFileSync_helper;", false, 'an underscore-suffixed identifier merely prefixed by the name'],
     ["someOtherThing(writeFileSync);", false, 'passed as a call argument, not assigned — a different code shape'],
   ];
   // REBIND_RE.flags (not a hardcoded 'g' or no flags at all): REBIND_RE now
