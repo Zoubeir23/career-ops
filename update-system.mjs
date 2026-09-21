@@ -1284,16 +1284,55 @@ export function locallyModifiedSystemFiles(paths, upstreamRef = 'FETCH_HEAD', ct
     return mergeBaseFallback();
   };
 
+  // `Preserved-Path:` trailers only ever name concrete files — atRisk (what
+  // apply() records as preservedPaths) always comes from `git diff --numstat`
+  // output, which expands directories itself and never emits a bare
+  // directory pathspec. So this is the complete set of concrete files any
+  // run has EVER individually preserved, regardless of which manifest entry
+  // — a plain file or a `dir/` entry like `modes/` — they fall under.
+  const everPreservedPaths = new Set();
+  for (const commit of autoUpdateCommits) {
+    for (const p of commit.preserved) everPreservedPaths.add(p);
+  }
+
+  const byBaseline = new Map();
+  const pushToGroup = (baseline, ...specs) => {
+    if (!byBaseline.has(baseline)) byBaseline.set(baseline, []);
+    byBaseline.get(baseline).push(...specs);
+  };
+
   // Group paths by their resolved baseline so each distinct baseline costs
   // exactly one `git diff` call. When no path has ever been individually
   // preserved (every real-world case until this fix ships, and every existing
   // test fixture), every path resolves to the same single commit — the exact
   // one-call shape this replaces.
-  const byBaseline = new Map();
   for (const path of paths) {
-    const baseline = baselineForPath(path) || 'HEAD'; // null → diff against self → empty, same degrade as before
-    if (!byBaseline.has(baseline)) byBaseline.set(baseline, []);
-    byBaseline.get(baseline).push(path);
+    if (!path.endsWith('/')) {
+      pushToGroup(baselineForPath(path) || 'HEAD', path); // null → diff against self → empty, same degrade as before
+      continue;
+    }
+    // A directory-shaped manifest entry cannot share ONE baseline with the
+    // files inside it: one file under it may have been individually
+    // preserved on a run that otherwise fully synced the rest of the
+    // directory, and diffing the whole directory against that run's baseline
+    // would either re-poison every OTHER file in it, or — the other
+    // direction — diff that one file against a baseline that never saw it
+    // preserved at all (#4362 review; CodeRabbit caught this before merge).
+    // So: every descendant this manifest entry has EVER individually
+    // preserved gets pulled out and resolved on its own, exactly like a
+    // plain top-level path; what is left of the directory is diffed against
+    // the ordinary "most recent auto-update commit" baseline — valid because
+    // apply()'s checkout only ever excludes the paths it names, so anything
+    // never named was genuinely checked out, and therefore genuinely synced,
+    // on every single run — with those known descendants excluded from its
+    // pathspec so they are never diffed twice against two different
+    // baselines.
+    const descendants = [...everPreservedPaths].filter((p) => p.startsWith(path));
+    for (const child of descendants) {
+      pushToGroup(baselineForPath(child) || 'HEAD', child);
+    }
+    const directoryBaseline = (autoUpdateCommits[0] && autoUpdateCommits[0].sha) || mergeBaseFallback() || 'HEAD';
+    pushToGroup(directoryBaseline, path, ...descendants.map((d) => `${EXCLUDE_PATHSPEC_PREFIX}${d}`));
   }
 
   const changedLocally = new Set();

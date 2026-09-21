@@ -68,23 +68,31 @@ function upstreamChange(repo, file, content) {
 }
 
 /**
- * Replays what apply() does for a run that preserves `preservedPaths`: the
- * non-preserved PATHS entries are checked out from upstream, the preserved
- * ones are left exactly as they are on disk (no checkout at all — apply()'s
- * `:(exclude)` pathspec has the identical effect), and the resulting commit
- * carries the SAME trailer apply() writes, via the SAME function.
+ * Replays what apply() does for a run that preserves `preservedPaths`:
+ * checks out every `allPaths` manifest entry from upstream with `:(exclude)`
+ * pathspecs for each preserved (always concrete-file) path — the SAME
+ * mechanism apply() uses, which is what makes this correct for a
+ * directory-shaped manifest entry (e.g. `modes/`) preserving only ONE file
+ * inside it, not just a plain top-level file. The resulting commit carries
+ * the SAME trailer apply() writes, via the SAME function.
  */
 function replayUpdateWithPreservation(repo, version, allPaths, preservedPaths) {
-  const preservedSet = new Set(preservedPaths);
-  const toCheckout = allPaths.filter((p) => !preservedSet.has(p));
+  const excludeSpecs = preservedPaths.map((p) => `:(exclude)${p}`);
   // Every real release bumps VERSION, so this always has something to stage
   // even when every content path is preserved this round.
   repo.g('checkout', '-q', 'upstream');
   writeFileSync(join(repo.dir, 'VERSION'), `${version}\n`);
   repo.g('commit', '-qam', `upstream: VERSION ${version}`);
   repo.g('checkout', '-q', 'main');
-  if (toCheckout.length > 0) repo.g('checkout', 'upstream', '--', ...toCheckout, 'VERSION');
-  else repo.g('checkout', 'upstream', '--', 'VERSION');
+  try {
+    repo.g('checkout', 'upstream', '--', ...allPaths, ...excludeSpecs, 'VERSION');
+  } catch {
+    // Every entry in allPaths is also excluded (fully preserved) — nothing to
+    // check out except VERSION. Real apply() has pathFullyPreserved() skip
+    // this case explicitly; the test fixture just falls back to checking out
+    // VERSION alone, same net effect.
+    repo.g('checkout', 'upstream', '--', 'VERSION');
+  }
   const message = `chore: auto-update system files to v${version}${preservedPathsTrailer(preservedPaths)}`;
   repo.g('commit', '-qam', message);
 }
@@ -300,4 +308,74 @@ const PATHS = ['modes/oferta.md', 'modes/cover.md'];
     fail(`case 7 threw=${threw} atRisk=${JSON.stringify(atRisk)}`);
   }
   rmSync(repo.dir, { recursive: true, force: true });
+}
+
+// ── 8. A directory-shaped manifest entry: one preserved file inside it must
+//    not defeat — or be defeated by — the rest of the directory (CodeRabbit
+//    review on #4362). SYSTEM_PATHS genuinely ships directory entries like
+//    `modes/` (see PATHS in updater-local-system-edits.test.mjs); the fix
+//    above walks the RAW paths array, and `modes/'`s literal string is never
+//    a member of any commit's preserved SET (that set only ever holds
+//    concrete files, from `git diff --numstat`), so a naive per-path walk
+//    would always resolve `modes/` to the newest commit regardless of what it
+//    preserved — silently reproducing #4355 for every directory-shaped entry.
+{
+  const repo = makeRepo();
+  const DIR_PATHS = ['modes/'];
+
+  // v2: oferta.md preserved; cover.md syncs normally.
+  upstreamChange(repo, 'modes/oferta.md', 'shipped oferta v2\n');
+  writeFileSync(join(repo.dir, 'modes', 'oferta.md'), 'MY LOCAL EDIT\n');
+  repo.g('commit', '-qam', 'local edit');
+  let atRisk = locallyModifiedSystemFiles(DIR_PATHS, 'upstream', repo.ctx);
+  replayUpdateWithPreservation(repo, '2', DIR_PATHS, atRisk);
+
+  // v3: upstream moves oferta.md again. The bug: grouping the whole `modes/`
+  // pathspec under the v2 commit (whose tree already holds the local edit)
+  // makes this diff come back empty.
+  upstreamChange(repo, 'modes/oferta.md', 'shipped oferta v3\n');
+  atRisk = locallyModifiedSystemFiles(DIR_PATHS, 'upstream', repo.ctx);
+  if (atRisk.length === 1 && atRisk[0] === 'modes/oferta.md') {
+    pass('a directory-shaped manifest entry still flags its own preserved file on the next update');
+  } else {
+    fail(`case 8 expected ['modes/oferta.md'], got ${JSON.stringify(atRisk)}`);
+  }
+}
+
+// ── 9. ...and divergent SIBLINGS under the same directory entry each resolve
+//    their own baseline — this is the exact "divergent sibling files" case
+//    the review comment asked for explicitly.
+{
+  const repo = makeRepo();
+  const DIR_PATHS = ['modes/'];
+
+  // v2: oferta.md preserved; cover.md syncs normally, untouched since.
+  upstreamChange(repo, 'modes/oferta.md', 'shipped oferta v2\n');
+  writeFileSync(join(repo.dir, 'modes', 'oferta.md'), 'OFERTA LOCAL EDIT\n');
+  repo.g('commit', '-qam', 'edit oferta');
+  let atRisk = locallyModifiedSystemFiles(DIR_PATHS, 'upstream', repo.ctx);
+  replayUpdateWithPreservation(repo, '2', DIR_PATHS, atRisk);
+
+  // v3: cover.md NOW gets its own local edit and is preserved too, while
+  // oferta.md remains preserved (still diverged, untouched since v2).
+  upstreamChange(repo, 'modes/oferta.md', 'shipped oferta v3\n');
+  upstreamChange(repo, 'modes/cover.md', 'shipped cover v2\n');
+  writeFileSync(join(repo.dir, 'modes', 'cover.md'), 'COVER LOCAL EDIT\n');
+  repo.g('commit', '-qam', 'edit cover');
+  atRisk = locallyModifiedSystemFiles(DIR_PATHS, 'upstream', repo.ctx);
+  replayUpdateWithPreservation(repo, '3', DIR_PATHS, atRisk);
+
+  // v4: both move upstream again. Both siblings must still be flagged, each
+  // resolved against its OWN correct (non-preserving) baseline commit — v2
+  // never comes into it for cover.md, and v3 never comes into it for
+  // oferta.md, since each preserved the OTHER file that round.
+  upstreamChange(repo, 'modes/oferta.md', 'shipped oferta v4\n');
+  upstreamChange(repo, 'modes/cover.md', 'shipped cover v3\n');
+  atRisk = locallyModifiedSystemFiles(DIR_PATHS, 'upstream', repo.ctx).sort();
+  const expected = ['modes/cover.md', 'modes/oferta.md'];
+  if (JSON.stringify(atRisk) === JSON.stringify(expected)) {
+    pass('divergent sibling files under the same directory entry each resolve their own baseline');
+  } else {
+    fail(`case 9 expected ${JSON.stringify(expected)}, got ${JSON.stringify(atRisk)}`);
+  }
 }
