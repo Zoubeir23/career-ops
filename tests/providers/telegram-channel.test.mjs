@@ -151,6 +151,16 @@ try {
     [['#senior #удаленка', 'Senior Engineer'], 'a hashtag-only first line whose next line is a short role title, not an employer'],
     [['#middle #гибрид', 'Ведущий инженер'], 'a hashtag-only first line whose next line is a short Russian role title (JS \\b never matches around Cyrillic)'],
     [['#tag1 #tag2'], 'a hashtag-only first line with no second line at all'],
+    // #4455: a title packing several pipe-delimited metadata tags is a
+    // different shape from "Title | Employer" — the non-greedy `[^|]`
+    // capture can only land on the LAST segment, which is whichever tag the
+    // template puts there (here, "IC"), never the employer. Both are
+    // measured live on @revacancy, 2026-09-24.
+    [['🟥 Ten Square Games - Mid/ Senior UI/UX Designer | 3 year(s) | Senior | IC', '▫️ Ten Square Games | Gaming'], 'a title with 3 pipes (multi-field template), employer named on the next line but not recovered by this heuristic'],
+    [['🟥 Senior Backend Developer | 5 year(s) | Senior | IC', '▫️ Financial technology'], 'a title with 3 pipes and no employer named anywhere in the post'],
+    // Defense in depth for the ordinary single-pipe shape: even with exactly
+    // one `|`, a bare seniority/role word after it is never a real employer.
+    [['Some Role Title | Senior'], 'a single-pipe title whose captured segment is a bare seniority word'],
   ];
   for (const [lines, label] of noNames) {
     const got = employerName(lines);
