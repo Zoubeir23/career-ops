@@ -156,6 +156,28 @@ function hasApplyControl(controls = []) {
   return controls.some((control) => APPLY_PATTERNS.some((pattern) => pattern.test(control)));
 }
 
+// A scraped page's closure banner states expiration as a bare fact — it
+// never hedges or denies it. LLM prose can do both ("I cannot determine
+// whether this job has expired", "this is not a case where the job has
+// expired"), which HARD_EXPIRED_PATTERNS's substring matching cannot tell
+// apart from an affirmative report on its own (CodeRabbit review on #4364).
+// Scoped to the SAME SENTENCE as the match, not the whole text: a hedge or
+// negation elsewhere in a long response must not suppress a genuine,
+// separately-stated expiration elsewhere in it.
+//
+// Deliberately a fixed phrase list, not general negation/uncertainty
+// detection (out of reach for a regex, and not needed here): a model
+// narrating "the job has expired, no longer accepting applications" does
+// not also, in the same breath, say it cannot tell — the two are
+// contradictory prose that practice does not produce. Kept narrow enough to
+// avoid the mirror failure: bare "not" is deliberately excluded, since
+// "no longer accepting applications" — one of the phrases this is meant to
+// let through — contains it as ordinary description of the closure itself,
+// not a hedge against reporting one.
+const HEDGE_OR_UNCERTAINTY_RE = /\b(?:cannot|can'?t|couldn'?t|unable to|not\s+(?:really\s+)?(?:sure|clear|certain)|unsure|unclear|uncertain|don'?t know|do not know|no way to (?:tell|know|determine|confirm)|(?:hard|difficult) to (?:tell|know|determine|confirm)|whether or not|may or may not|not\s+a\s+case\s+where)\b/i;
+
+const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+/;
+
 /**
  * Whether `text` contains an unambiguous "this posting is gone" phrase —
  * standalone access to the HARD_EXPIRED_PATTERNS half of classifyLiveness(),
@@ -170,14 +192,22 @@ function hasApplyControl(controls = []) {
  * or a short body alone, both need "and no visible Apply control" to mean
  * anything. A short, genuinely malformed LLM response is exactly as short as
  * a genuine liveness-gate exit, so nothing here can safely stand in for that
- * missing corroboration. HARD_EXPIRED_PATTERNS carries no such caveat: those
- * phrases are treated as sufficient on their own in every existing caller.
+ * missing corroboration.
+ *
+ * One caveat HARD_EXPIRED_PATTERNS's other callers don't need: a sentence
+ * that also hedges or denies the match (HEDGE_OR_UNCERTAINTY_RE above) is
+ * not counted — see that constant's comment for why prose, unlike a scraped
+ * banner, needs this at all.
  *
  * @param {string} text - arbitrary prose, not necessarily a scraped page.
  * @returns {boolean}
  */
 export function hasHardExpiredSignal(text = '') {
-  return Boolean(firstMatch(HARD_EXPIRED_PATTERNS, normalizeForMatch(text)));
+  const normalized = normalizeForMatch(text);
+  const sentences = normalized.split(SENTENCE_SPLIT_RE);
+  return sentences.some(
+    (sentence) => firstMatch(HARD_EXPIRED_PATTERNS, sentence) && !HEDGE_OR_UNCERTAINTY_RE.test(sentence),
+  );
 }
 
 export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '', bodyText: rawBodyText = '', applyControls: rawApplyControls = [] } = {}) {

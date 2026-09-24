@@ -32,6 +32,14 @@ async function withScratchPaths(fn) {
   const work = mkdtempSync(join(tmpdir(), 'cops-batcheval-liveness-'));
   const oldReports = PATHS.reports;
   const oldAdditions = PATHS.trackerAdditions;
+  // Capture whether each var was set at all, not just its value: `delete`
+  // unconditionally (the previous version of this fixture) clobbers a
+  // pre-existing value from the environment or an earlier-run sibling
+  // fixture with "unset" instead of putting back what was actually there.
+  const hadReportsDirEnv = Object.prototype.hasOwnProperty.call(process.env, 'CAREER_OPS_REPORTS_DIR');
+  const oldReportsDirEnv = process.env.CAREER_OPS_REPORTS_DIR;
+  const hadTrackerEnv = Object.prototype.hasOwnProperty.call(process.env, 'CAREER_OPS_TRACKER');
+  const oldTrackerEnv = process.env.CAREER_OPS_TRACKER;
   try {
     PATHS.reports = join(work, 'reports');
     PATHS.trackerAdditions = join(work, 'tracker-additions');
@@ -46,8 +54,10 @@ async function withScratchPaths(fn) {
   } finally {
     PATHS.reports = oldReports;
     PATHS.trackerAdditions = oldAdditions;
-    delete process.env.CAREER_OPS_REPORTS_DIR;
-    delete process.env.CAREER_OPS_TRACKER;
+    if (hadReportsDirEnv) process.env.CAREER_OPS_REPORTS_DIR = oldReportsDirEnv;
+    else delete process.env.CAREER_OPS_REPORTS_DIR;
+    if (hadTrackerEnv) process.env.CAREER_OPS_TRACKER = oldTrackerEnv;
+    else delete process.env.CAREER_OPS_TRACKER;
     rmSync(work, { recursive: true, force: true });
   }
 }
