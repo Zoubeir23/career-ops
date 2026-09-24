@@ -44,10 +44,10 @@
  *   - an empty skillEntrypoints list is a no-op (pathspec unchanged)
  */
 
-import { mkdtempSync, writeFileSync, mkdirSync } from 'fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { pass, fail, rmSync, run } from './helpers.mjs';
+import { pass, fail, rmSync, run, ROOT } from './helpers.mjs';
 import { gitIn, systemTreeDiffers, driftPathspecExcludingSkillEntrypoints } from '../update-system.mjs';
 
 const SYSTEM_PATHS = ['scan.mjs', '.agents/', '.claude/skills/', 'scaffolder/'];
@@ -225,5 +225,30 @@ console.log('\n🧪 Testing updater drift detection over materialized skill entr
     pass('each skill entrypoint contributes its own :(exclude) pathspec');
   } else {
     fail(`multi-entrypoint exclusion malformed: ${JSON.stringify(result)}`);
+  }
+}
+
+// ── 7. check() itself is actually wired to the exclusion, not just the
+//    standalone helper (santifer's review on #4216) ───────────────────────
+//    Every case above drives driftPathspecExcludingSkillEntrypoints() and
+//    systemTreeDiffers() directly against a throwaway repo — proving the
+//    HELPER is correct, never that check()'s own call site actually routes
+//    through it rather than the old unfiltered `systemTreeDiffers(SYSTEM_
+//    PATHS, 'FETCH_HEAD')`. check() is not exported and drives a real
+//    network fetch against CANONICAL_REPO, so it is not something this
+//    throwaway-repo harness can call directly; a source-level assertion is
+//    the narrowest thing that actually pins the wiring, matching this
+//    repo's existing convention for call-site guards it cannot otherwise
+//    exercise (see e.g. updater-migration-tests.mjs's source-pattern checks).
+{
+  const source = readFileSync(join(ROOT, 'update-system.mjs'), 'utf-8');
+  // Anchored on the exact call this file's own doc comment (top) and PR
+  // description cite: systemTreeDiffers's first argument must be the
+  // filtered pathspec, not the raw SYSTEM_PATHS list.
+  const wired = /systemTreeDiffers\(\s*driftPathspecExcludingSkillEntrypoints\(\s*SYSTEM_PATHS\s*,\s*SKILL_ENTRYPOINTS\s*\)\s*,\s*['"]FETCH_HEAD['"]/.test(source);
+  if (wired) {
+    pass("check()'s systemTreeDiffers() call is wired through driftPathspecExcludingSkillEntrypoints(), not the raw SYSTEM_PATHS list");
+  } else {
+    fail("REGRESSION: check() no longer routes systemTreeDiffers() through driftPathspecExcludingSkillEntrypoints() — a materialized-entrypoint install would report permanent false drift again");
   }
 }
