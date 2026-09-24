@@ -156,6 +156,30 @@ function hasApplyControl(controls = []) {
   return controls.some((control) => APPLY_PATTERNS.some((pattern) => pattern.test(control)));
 }
 
+/**
+ * Whether `text` contains an unambiguous "this posting is gone" phrase —
+ * standalone access to the HARD_EXPIRED_PATTERNS half of classifyLiveness(),
+ * for a caller whose input isn't a scraped page at all (#4364: an LLM's own
+ * prose narrating that it hit a liveness gate, with no HTTP status, no apply
+ * controls, no URL to check).
+ *
+ * Deliberately HARD-only, never SOFT_EXPIRED_PATTERNS or MIN_CONTENT_CHARS:
+ * classifyLiveness() places SOFT_EXPIRED_PATTERNS and its content-length
+ * heuristic AFTER the apply-control check specifically because they are
+ * ambiguous without it (see their own comments above) — "job expired" alone,
+ * or a short body alone, both need "and no visible Apply control" to mean
+ * anything. A short, genuinely malformed LLM response is exactly as short as
+ * a genuine liveness-gate exit, so nothing here can safely stand in for that
+ * missing corroboration. HARD_EXPIRED_PATTERNS carries no such caveat: those
+ * phrases are treated as sufficient on their own in every existing caller.
+ *
+ * @param {string} text - arbitrary prose, not necessarily a scraped page.
+ * @returns {boolean}
+ */
+export function hasHardExpiredSignal(text = '') {
+  return Boolean(firstMatch(HARD_EXPIRED_PATTERNS, normalizeForMatch(text)));
+}
+
 export function classifyLiveness({ status = 0, requestedUrl = '', finalUrl = '', bodyText: rawBodyText = '', applyControls: rawApplyControls = [] } = {}) {
   const bodyText = normalizeForMatch(rawBodyText);
   const applyControls = (Array.isArray(rawApplyControls) ? rawApplyControls : []).map(normalizeForMatch);
