@@ -338,10 +338,23 @@ function normalizeKeywordList(value) {
 // only boundary-anchors 2-3 letter acronyms. Location keywords need boundaries on
 // every keyword, so they get their own compiler rather than changing title-matching
 // behaviour. Returns a predicate, mirroring compileKeyword()'s shape.
+// V8 (confirmed on Node 26 / V8 14.6.202.34-node.28, #4478) mismatches an
+// unanchored `[\p{...}]` class terminated by `$` against a single astral
+// code point (two UTF-16 code units, one character) — `/[\p{L}]$/u.test('𐐀')`
+// wrongly returns false, while the spec-correct `/\p{L}$/u` (no class) and
+// `/^[\p{L}]$/u` (anchored both ends) agree it's true. Node 24 (CI's pinned
+// version) and Node 25 don't reproduce it, so this was invisible until a
+// reporter ran the suite on 26. Testing the actual first/last CODE POINT
+// (via `[...keyword]`, which iterates by code point, not code unit) against
+// a BOTH-ENDS-anchored pattern sidesteps the buggy shape entirely — spelled
+// so it can never regress back into the one V8 gets wrong.
+const WORD_CODEPOINT_RE = /^[\p{L}\p{M}\p{N}]$/u;
+
 function compileLocationKeyword(keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const startsWord = /^[\p{L}\p{M}\p{N}]/u.test(keyword);
-  const endsWord = /[\p{L}\p{M}\p{N}]$/u.test(keyword);
+  const codepoints = [...keyword];
+  const startsWord = WORD_CODEPOINT_RE.test(codepoints[0]);
+  const endsWord = WORD_CODEPOINT_RE.test(codepoints[codepoints.length - 1]);
   const prefix = startsWord ? '(?<![\\p{L}\\p{M}\\p{N}])' : '';
   const suffix = endsWord ? '(?![\\p{L}\\p{M}\\p{N}])' : '';
   const re = new RegExp(`${prefix}${escaped}${suffix}`, 'u');
