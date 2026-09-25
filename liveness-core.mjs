@@ -163,7 +163,15 @@ function hasApplyControl(controls = []) {
 // apart from an affirmative report on its own (CodeRabbit review on #4364).
 // Scoped to the SAME SENTENCE as the match, not the whole text: a hedge or
 // negation elsewhere in a long response must not suppress a genuine,
-// separately-stated expiration elsewhere in it.
+// separately-stated expiration elsewhere in it. "Same sentence" is decided
+// per LINE first, then by terminal punctuation within that line — a hedge on
+// one line ("I cannot determine whether the URL is valid") and an affirmative
+// report on the very next ("This job has expired") are two separate
+// statements with no sentence-ending punctuation between them, and
+// normalizeForMatch() collapses that newline to a space before
+// SENTENCE_SPLIT_RE ever sees it — so splitting on `\s+` after normalizing
+// would merge them into one "sentence" and let the unrelated hedge suppress a
+// real signal (CodeRabbit follow-up review on #4459).
 //
 // Deliberately a fixed phrase list, not general negation/uncertainty
 // detection (out of reach for a regex, and not needed here): a model
@@ -203,8 +211,14 @@ const SENTENCE_SPLIT_RE = /(?<=[.!?])\s+/;
  * @returns {boolean}
  */
 export function hasHardExpiredSignal(text = '') {
-  const normalized = normalizeForMatch(text);
-  const sentences = normalized.split(SENTENCE_SPLIT_RE);
+  // Split on real line breaks BEFORE normalizing: normalizeForMatch()
+  // collapses every run of whitespace, newlines included, to a single space,
+  // which would silently merge two separate lines into one sentence-scan
+  // unit. Splitting first, then normalizing and sentence-splitting each line
+  // on its own, keeps a hedge on one line from ever sharing a "sentence"
+  // with an affirmative statement on another.
+  const lines = (typeof text === 'string' ? text : '').split(/\r\n?|\n/);
+  const sentences = lines.flatMap((line) => normalizeForMatch(line).split(SENTENCE_SPLIT_RE));
   return sentences.some(
     (sentence) => firstMatch(HARD_EXPIRED_PATTERNS, sentence) && !HEDGE_OR_UNCERTAINTY_RE.test(sentence),
   );

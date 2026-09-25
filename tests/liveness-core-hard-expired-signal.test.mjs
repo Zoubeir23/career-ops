@@ -83,3 +83,15 @@ if (hasHardExpiredSignal('This job posting has expired and is no longer acceptin
 } else {
   fail('REGRESSION: the hedge guard over-triggered on ordinary closure language containing "no"/"not"');
 }
+
+// ── A hedge and a real signal on separate LINES, no terminal punctuation ───
+// (CodeRabbit follow-up review on #4459). normalizeForMatch() collapses a
+// newline to a plain space, so without splitting on real line breaks FIRST,
+// "I cannot determine whether the URL is valid\nThis job has expired" reads
+// as one run-on "sentence" once normalized — the hedge on the first line
+// would then incorrectly suppress the affirmative report on the second.
+if (hasHardExpiredSignal('I cannot determine whether the URL is valid\nThis job has expired') === true) {
+  pass('a hedge and an affirmative report on separate lines (no sentence-ending punctuation) are scoped independently');
+} else {
+  fail('REGRESSION: a hedge on one line suppressed an affirmative report on the very next line');
+}
