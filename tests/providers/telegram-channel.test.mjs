@@ -133,6 +133,11 @@ try {
     [['Engineering Manager @ Constructor‍.io'], 'Constructor.io', 'zero-width characters are stripped from the name'],
     [['#middle #удаленка', 'Т1', 'Data Science (LLM/NLP)'], 'Т1', 'a hashtag-only first line, bare employer alone on the next (measured live 2026-09-05)'],
     [['#senior #гибрид #москва', 'X5 Медиа', 'Ведущий backend-разработчик'], 'X5 Медиа', 'a hashtag-only first line, employer name carrying a digit'],
+    // #4479 (CodeRabbit review on #4455's fix): the single-pipe ROLE_WORD_RE
+    // guard must reject only a BARE role word, not any employer name that
+    // happens to contain one as a substring — "Senior Labs" is a legitimate
+    // company name, not the bare word "Senior".
+    [['Engineer | Senior Labs'], 'Senior Labs', 'a single-pipe employer name that legitimately contains a role word as part of it'],
   ];
   for (const [lines, want, label] of names) {
     const got = employerName(lines);

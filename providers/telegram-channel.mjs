@@ -164,8 +164,15 @@ export function employerName(lines) {
     // applies: a bare seniority/role word ("Senior", "Middle", "Lead")
     // passes plausibleEmployer's checks on its own (a single capitalized
     // word), but a real employer name is very rarely a single seniority
-    // word (#4455).
-    if (pipeEmployer && !ROLE_WORD_RE.test(pipeEmployer)) return pipeEmployer;
+    // word (#4455). Anchored to the WHOLE capture, not a bare .test(): the
+    // hashtag-line shape below can reuse ROLE_WORD_RE unanchored because its
+    // capture is a full description line where a role word appearing at all
+    // is already suspicious, but here the capture is a company name and a
+    // role word can legitimately be part of one ("Senior Labs", "Acme
+    // Senior Corp") — an unanchored test rejected those as if they were the
+    // bare word alone (CodeRabbit review on #4479).
+    const isBareRoleWord = new RegExp(`^${ROLE_WORD_RE.source}$`, ROLE_WORD_RE.flags).test(pipeEmployer);
+    if (pipeEmployer && !isBareRoleWord) return pipeEmployer;
   }
   if ((m = second.match(/^(?:в|at)\s+([^—–,(]{2,60}?)\s*(?:[—–]|$)/u))) return plausibleEmployer(m[1], true);
   // A hashtag-only first line carries no title, and this template puts the
