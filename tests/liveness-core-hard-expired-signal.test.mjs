@@ -95,3 +95,17 @@ if (hasHardExpiredSignal('I cannot determine whether the URL is valid\nThis job 
 } else {
   fail('REGRESSION: a hedge on one line suppressed an affirmative report on the very next line');
 }
+
+// ── A single hedge sentence WRAPPED across two lines is still a hedge ──────
+// (CodeRabbit compounding follow-up on the fix above). Splitting on every
+// line break would strand "this job has expired" — the tail of a soft word
+// wrap, not a new statement — on its own line with no hedge in sight, and
+// misread the wrap as an affirmative report. Distinguished from the genuine
+// two-statement case above by capitalization: a real new statement starts
+// with a capital letter ("This job has expired"); a wrapped continuation
+// starts in lowercase ("this job has expired").
+if (hasHardExpiredSignal('I cannot determine whether\nthis job has expired') === false) {
+  pass('a single hedge sentence word-wrapped across two lines (lowercase continuation) is still recognized as a hedge');
+} else {
+  fail('REGRESSION: a soft-wrapped hedge was misread as an affirmative report because its tail landed on its own line');
+}

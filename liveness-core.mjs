@@ -217,7 +217,28 @@ export function hasHardExpiredSignal(text = '') {
   // unit. Splitting first, then normalizing and sentence-splitting each line
   // on its own, keeps a hedge on one line from ever sharing a "sentence"
   // with an affirmative statement on another.
-  const lines = (typeof text === 'string' ? text : '').split(/\r\n?|\n/);
+  const rawLines = (typeof text === 'string' ? text : '').split(/\r\n?|\n/);
+  // ...except a SOFT line wrap, which is the opposite case: "I cannot
+  // determine whether\nthis job has expired" is ONE hedge sentence broken
+  // mid-clause by word-wrapping, not two statements — splitting there would
+  // strand "this job has expired" on its own line with no hedge in sight and
+  // misread the wrap as an affirmative report (CodeRabbit follow-up review on
+  // #4459). The distinguishing signal already present in both of the
+  // review's own examples: a genuine new statement starts with a capital
+  // letter ("This job has expired"); the tail of a wrapped sentence
+  // continues in lowercase ("this job has expired"). So a line starting with
+  // a lowercase letter is merged back into the previous line before any
+  // sentence-splitting happens, rather than treated as its own unit.
+  // English-only, like every HARD_EXPIRED_PATTERNS phrase this feeds into —
+  // not a general prose-boundary detector.
+  const lines = [];
+  for (const raw of rawLines) {
+    if (lines.length > 0 && /^[a-z]/.test(raw.trimStart())) {
+      lines[lines.length - 1] += ` ${raw.trimStart()}`;
+    } else {
+      lines.push(raw);
+    }
+  }
   const sentences = lines.flatMap((line) => normalizeForMatch(line).split(SENTENCE_SPLIT_RE));
   return sentences.some(
     (sentence) => firstMatch(HARD_EXPIRED_PATTERNS, sentence) && !HEDGE_OR_UNCERTAINTY_RE.test(sentence),
