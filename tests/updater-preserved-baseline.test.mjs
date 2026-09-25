@@ -366,9 +366,12 @@ const PATHS = ['modes/oferta.md', 'modes/cover.md'];
   replayUpdateWithPreservation(repo, '3', DIR_PATHS, atRisk);
 
   // v4: both move upstream again. Both siblings must still be flagged, each
-  // resolved against its OWN correct (non-preserving) baseline commit — v2
-  // never comes into it for cover.md, and v3 never comes into it for
-  // oferta.md, since each preserved the OTHER file that round.
+  // resolved against its own correct non-preserving baseline. v3 preserved
+  // BOTH files (see the comment above), so oferta.md's walk skips v3 AND v2
+  // (which also preserved it) and falls back to the pre-update merge-base.
+  // cover.md's walk skips only v3 (which preserved it) and lands on v2 —
+  // v2 never preserved cover.md, so it IS cover.md's baseline (CodeRabbit
+  // review on #4362).
   upstreamChange(repo, 'modes/oferta.md', 'shipped oferta v4\n');
   upstreamChange(repo, 'modes/cover.md', 'shipped cover v3\n');
   atRisk = locallyModifiedSystemFiles(DIR_PATHS, 'upstream', repo.ctx).sort();
