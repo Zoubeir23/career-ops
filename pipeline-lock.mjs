@@ -44,7 +44,19 @@ const DEFAULT_STALE_MS = 30_000;
 // as the lock "aging out" prematurely and the test asserting the opposite of
 // what it measured (#4537) — read once at module load, which is fine since
 // every caller is a fresh process.
-export const OWNERLESS_GRACE_MS = Number(process.env.CAREER_OPS_OWNERLESS_GRACE_MS) || 1_000;
+//
+// Only a finite, positive override is honoured. `|| 1_000` alone would accept
+// a NEGATIVE value (a truthy number, so it survives the `||`) and reduce the
+// floor below 1,000ms — the opposite of every legitimate use, which widens
+// it. It would also accept `Infinity`, which stops ownerless locks from ever
+// aging out and can hang acquisition on a genuinely abandoned lock. Both are
+// clearly misconfiguration, not a caller asking for "no floor"; unlike
+// acquirePipelineLock's own `maxWaitMs`, this constant has no documented
+// Infinity-means-unbounded convention to preserve.
+const configuredOwnerlessGraceMs = Number(process.env.CAREER_OPS_OWNERLESS_GRACE_MS);
+export const OWNERLESS_GRACE_MS = Number.isFinite(configuredOwnerlessGraceMs) && configuredOwnerlessGraceMs > 0
+  ? configuredOwnerlessGraceMs
+  : 1_000;
 const DEFAULT_RETRY_MS = 80;
 const DEFAULT_TIMEOUT_MS = 8_000;
 // Ceiling on progress-extended waiting (see the deadline logic in
