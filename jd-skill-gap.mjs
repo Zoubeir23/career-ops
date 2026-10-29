@@ -104,6 +104,17 @@ const REQUIREMENT_HEADER_RE = new RegExp(
     'it\\s+would\\s+be\\s+great\\s+if\\s+you\\s+ha(?:ve|d)',
     'ideal\\s+candidate',
     'skills\\s+(?:and|&)\\s+experience',
+    // The ^ anchor means the keyword has to be the heading's first word, so
+    // a qualified noun heading — Amazon's "Basic Qualifications", Google's
+    // "Minimum Qualifications", "Role Qualifications", "Key Requirements" —
+    // matched nothing and the JD reported no-requirements-section (#6255).
+    // The qualifier is a closed list, not "any words": an open prefix would
+    // turn a prose line such as "Gather and document requirements" into a
+    // heading and open a block in the middle of the responsibilities.
+    '(?:(?:basic|minimum|key|core|job|role|position|technical|essential|desired|desirable|additional|mandatory|general|specific|candidate|professional|education(?:al)?)\\s+){1,2}(?:requirement|qualification)',
+    // US public-sector postings title the block "Knowledge, Skills, and
+    // Abilities" (KSAs) or "Experience, Skills, and Abilities" (#6255).
+    '(?:(?:knowledge|experience|education),?\\s+)?skills,?\\s+(?:and|&)\\s+abilit(?:y|ies)',
   ].join('|') + ')s?\\b|(?:' + [
     // zh-TW / zh-CN requirement headers.
     // 104 / 1111 / CakeResume / Yourator all use variants of these headings.
