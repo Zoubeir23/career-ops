@@ -34,7 +34,7 @@ const AUTO_APPROVE = [
   '--no-confirm',
 ];
 
-/** Every file allowed to name a flag above, how many lines may name each
+/** Every file allowed to name a flag above, how many times it may name each
  *  flag, and why. Pinned per flag and per count, not per file: a second grant
  *  added to an allowed file must fail too. Changing a line here is a
  *  permission change: it needs the same review as the spawner itself. */
@@ -84,15 +84,19 @@ function codeFiles() {
 }
 
 const COMMENT_LINE = /^\s*(?:\/\/|\/\*|\*|#)/;
-const FLAG_RES = AUTO_APPROVE.map((flag) => [flag, new RegExp(`(?<![\\w-])${flag}(?![\\w-])`)]);
+const FLAG_RES = AUTO_APPROVE.map((flag) => [flag, new RegExp(`(?<![\\w-])${flag}(?![\\w-])`, 'g')]);
 
-/** How many code lines (not comments) name each flag. A comment that names
- *  a flag to warn against it — clis.ts, salary-gap.mjs — is not a grant. */
+/** How many times code (not comments) names each flag — every occurrence, so
+ *  a second grant on the same line counts too. A comment that names a flag
+ *  to warn against it — clis.ts, salary-gap.mjs — is not a grant. */
 function flagsIn(text) {
   const found = {};
   for (const line of text.split('\n')) {
     if (COMMENT_LINE.test(line)) continue;
-    for (const [flag, re] of FLAG_RES) if (re.test(line)) found[flag] = (found[flag] ?? 0) + 1;
+    for (const [flag, re] of FLAG_RES) {
+      const n = line.match(re)?.length ?? 0;
+      if (n) found[flag] = (found[flag] ?? 0) + n;
+    }
   }
   return found;
 }
@@ -144,6 +148,8 @@ test('the guard actually fires (mutation check)', () => {
   assert.deepEqual(flagsIn(spawner), { '--always-approve': 1 });
   // A second grant in the same text is counted, so it cannot hide behind the first.
   assert.deepEqual(flagsIn(`${spawner}\n${spawner}`), { '--always-approve': 2 });
+  // ...including one on the same line as the first.
+  assert.deepEqual(flagsIn(`${spawner} ${spawner}`), { '--always-approve': 2 });
   // ...and a comment naming the flag, or a longer flag sharing its prefix, does not.
   assert.deepEqual(flagsIn('// never pass --yolo here'), {});
   assert.deepEqual(flagsIn("args.push('--yolo-mode-docs')"), {});
