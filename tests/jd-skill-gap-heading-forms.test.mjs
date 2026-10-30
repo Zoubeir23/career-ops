@@ -100,3 +100,18 @@ test('a prose line ending in "requirements" does not open a requirements block',
   const jd = 'Responsibilities\nGather and document requirements\n- Kafka and Redis\n';
   assert.deepEqual(extractJdSkills(jd), []);
 });
+
+// A qualified keyword only opens a block when it ENDS the heading (or is
+// followed by ":" / "("). Otherwise a bare requirement line that happens to
+// start with one — "Technical requirements include …" — read as a heading
+// and its own skills were dropped.
+test('a bare line starting with a qualified keyword is a requirement, not a heading', () => {
+  const jd = '## Requirements\n- Experience with Terraform\nTechnical requirements include Python and Kubernetes\n';
+  const found = extractJdSkills(jd).sort();
+  assert.deepEqual(found, EXPECTED, `got ${found.join(', ') || '(none)'}`);
+});
+
+test('a qualified heading followed by "(" or an inline list still opens the block', () => {
+  assertExtracts(`Minimum Qualifications (all required)${BULLETS}`, 'paren');
+  assert.deepEqual(extractJdSkills('Key Requirements: Python, Kubernetes, Terraform\n').sort(), EXPECTED);
+});

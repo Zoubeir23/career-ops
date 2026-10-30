@@ -111,10 +111,15 @@ const REQUIREMENT_HEADER_RE = new RegExp(
     // The qualifier is a closed list, not "any words": an open prefix would
     // turn a prose line such as "Gather and document requirements" into a
     // heading and open a block in the middle of the responsibilities.
-    '(?:(?:basic|minimum|key|core|job|role|position|technical|essential|desired|desirable|additional|mandatory|general|specific|candidate|professional|education(?:al)?)\\s+){1,2}(?:requirement|qualification)',
+    // The lookahead also requires the keyword to END the heading (or be
+    // followed by ":" / "("): without it, a bare requirement line such as
+    // "Technical requirements include Python and Kubernetes" read as a
+    // heading and its skills were dropped.
+    '(?:(?:basic|minimum|key|core|job|role|position|technical|essential|desired|desirable|additional|mandatory|general|specific|candidate|professional|education(?:al)?)\\s+){1,2}(?:requirement|qualification)(?=s?\\s*(?:[:\uFF1A(\uFF08]|$))',
     // US public-sector postings title the block "Knowledge, Skills, and
     // Abilities" (KSAs) or "Experience, Skills, and Abilities" (#6255).
-    '(?:(?:knowledge|experience|education),?\\s+)?skills,?\\s+(?:and|&)\\s+abilit(?:y|ies)',
+    // Same end-of-heading lookahead, for the same prose-line reason.
+    '(?:(?:knowledge|experience|education),?\\s+)?skills,?\\s+(?:and|&)\\s+abilit(?:y|ies)(?=\\s*(?:[:\uFF1A(\uFF08]|$))',
   ].join('|') + ')s?\\b|(?:' + [
     // zh-TW / zh-CN requirement headers.
     // 104 / 1111 / CakeResume / Yourator all use variants of these headings.
