@@ -40,12 +40,12 @@ positions; `audit` and `clean` use the same rule, so they never disagree:
 |---|---|
 | ZWJ | between two pictographs (an optional VS16 or skin tone may sit before it) |
 | ZWNJ | between two Arabic-script letters (Persian, Urdu, ...) |
-| ZWJ or ZWNJ | between two characters of the same Brahmic script (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, Sinhala) |
+| ZWJ or ZWNJ | between two letters or marks of the same Brahmic script (Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil, Telugu, Kannada, Malayalam, Sinhala) |
 | VS16 (U+FE0F) | directly after a pictograph |
 
 Everything else is still stripped and reported: joiners next to Latin letters or spaces, at the start
 or end of a line, between two different scripts, VS15 and other variation selectors, and any run of two
-or more joiners. Each line of output says how many joiners were kept (`kept 3 script joiners`), so the
+or more joiners. Digits never qualify, even Arabic-Indic or Devanagari ones. Each line of output says how many joiners were kept (`kept 3 script joiners`), so the
 exception stays visible.
 
 One single joiner in a qualifying position can still carry one bit, for example between two Persian

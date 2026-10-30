@@ -41,9 +41,11 @@ const TEXT_EXT = new Set(['.html','.htm','.md','.txt','.json','.csv','.svg','.xm
 const ZWNJ = 0x200C, ZWJ = 0x200D, VS16 = 0xFE0F;
 const PICTO = /\p{Extended_Pictographic}/u;
 const SKIN_TONE = /\p{Emoji_Modifier}/u;
-const ARABIC = /\p{Script=Arabic}/u;
+// Letters only (with combining marks for the Brahmic virama): Arabic-Indic and Devanagari digits
+// share the script, and a joiner between two digits spells nothing.
+const ARABIC = /(?=\p{L})\p{Script=Arabic}/u;
 const BRAHMIC = ['Devanagari','Bengali','Gurmukhi','Gujarati','Oriya','Tamil','Telugu','Kannada','Malayalam','Sinhala']
-  .map(s => new RegExp(`\\p{Script=${s}}`, 'u'));
+  .map(s => new RegExp(`(?=[\\p{L}\\p{M}])\\p{Script=${s}}`, 'u'));
 const is = (re, ch) => ch !== undefined && re.test(ch);
 const sameBrahmic = (a, b) => BRAHMIC.some(re => is(re, a) && is(re, b));
 // The emoji a ZWJ continues: a pictograph, optionally followed by one skin tone or one VS16.
@@ -98,7 +100,7 @@ function processFile(file, mode, opts){
     // For HTML, exclude BOTH <style> and <script> from scanning AND cleaning (mask, then restore).
     const { found, kept } = scanText(isHtml ? maskCode(t).masked : t, opts.keepJoiners);
     // Kept joiners are named on every line, so the exception stays visible rather than silent.
-    const keptNote = kept ? `; kept ${kept} script joiner${kept===1?'':'s'}` : '';
+    const keptNote = opts.keepJoiners ? `; kept ${kept} script joiner${kept===1?'':'s'}` : '';
     if(mode==='clean' && (Object.keys(found).length || opts.ascii)){
       let cleaned;
       if(isHtml){ const { masked, masks } = maskCode(t); cleaned = restoreCode(cleanText(masked, opts.ascii, opts.keepJoiners), masks); }

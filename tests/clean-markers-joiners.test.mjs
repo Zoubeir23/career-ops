@@ -58,6 +58,8 @@ const STRIPPED = [
   ['ZWJ next to a space', '\u{1F468} \u200D\u{1F4BB}', '\u{1F468} \u{1F4BB}'],
   ['ZWJ at the end of a line', '\u{1F468}\u200D\n', '\u{1F468}\n'],
   ['VS15 after a pictograph', '\u2764\uFE0E', '\u2764'],
+  ['ZWNJ between two Arabic-Indic digits', '\u0661\u200C\u0662', '\u0661\u0662'],
+  ['ZWJ between two Devanagari digits', '\u0967\u200D\u0968', '\u0967\u0968'],
 ];
 
 for (const [name, text] of KEPT) {
@@ -108,4 +110,13 @@ test('--keep-script-joiners is a known flag', () => {
   const r = run('--help');
   assert.equal(r.status, 0, describeSpawn(r, '--help exited non-zero'));
   assert.match(r.all, /--keep-script-joiners/, '--help does not list the flag');
+});
+
+test('with the flag on, every line names the kept count, zero included', () => {
+  const a = onFile('plain text\n', 'audit', '--keep-script-joiners');
+  assert.equal(a.status, 0, describeSpawn(a, 'audit failed a clean file'));
+  assert.match(a.stdout, /kept 0 script joiners/);
+
+  const off = onFile('plain text\n', 'audit');
+  assert.doesNotMatch(off.stdout, /script joiner/, 'the kept note must stay absent without the flag');
 });
