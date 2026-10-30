@@ -15,7 +15,7 @@
 // allowance after the debt is paid.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readFileSync, readSync } from 'node:fs';
 import { extname, join, relative, sep } from 'node:path';
 import { ROOT } from './helpers.mjs';
 import { walkTree } from '../lib/walk-tree.mjs';
@@ -55,20 +55,31 @@ const SKIP_DIRS = new Set(['node_modules', '.git', '.next', 'tests', 'test-fixtu
 /** An extensionless file counts when it starts with a shebang (`cops` today),
  *  so a new extensionless entry point is discovered rather than listed. */
 function hasShebang(path) {
-  try { return readFileSync(path, { encoding: 'utf8' }).startsWith('#!'); } catch { return false; }
+  // Two bytes, not the whole file: an extensionless binary is never read in full.
+  const head = Buffer.alloc(2);
+  let fd;
+  try {
+    fd = openSync(path, 'r');
+    return readSync(fd, head, 0, 2, 0) === 2 && head.toString('latin1') === '#!';
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
 }
 
-function isScannedFile(name, dir) {
-  if (/\.test\.[cm]?[jt]sx?$/.test(name)) return false;
-  const ext = extname(name);
-  return ext ? CODE_EXT.has(ext) : hasShebang(join(dir, name));
+function isScannedFile(entry, dir) {
+  // Regular files only: opening a FIFO or socket would block the walk.
+  if (!entry.isFile() || /\.test\.[cm]?[jt]sx?$/.test(entry.name)) return false;
+  const ext = extname(entry.name);
+  return ext ? CODE_EXT.has(ext) : hasShebang(join(dir, entry.name));
 }
 
 // walkTree, not a hand-rolled readdir loop: it applies the nested-checkout
 // guard, so a linked worktree inside this one cannot feed its spawners in.
 function codeFiles() {
   return walkTree(ROOT, {
-    skip: (entry, dir) => (entry.isDirectory() ? SKIP_DIRS.has(entry.name) : !isScannedFile(entry.name, dir)),
+    skip: (entry, dir) => (entry.isDirectory() ? SKIP_DIRS.has(entry.name) : !isScannedFile(entry, dir)),
   });
 }
 
