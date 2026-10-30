@@ -115,3 +115,21 @@ test('a qualified heading followed by "(" or an inline list still opens the bloc
   assertExtracts(`Minimum Qualifications (all required)${BULLETS}`, 'paren');
   assert.deepEqual(extractJdSkills('Key Requirements: Python, Kubernetes, Terraform\n').sort(), EXPECTED);
 });
+
+// Closing heading markers still end the heading.
+for (const heading of ['## Basic Qualifications ##', '【Basic Qualifications】', '## Knowledge, Skills, and Abilities ##']) {
+  test(`a qualified heading with closing markers is recognized: "${heading}"`, () => {
+    assertExtracts(`${heading}${BULLETS}`, heading);
+  });
+}
+
+// A colon line with no list separator now matches as a heading; its known
+// skills must survive, and prose after the colon must not become a "skill".
+test('a colon requirement line without separators keeps its known skills', () => {
+  const jd = '## Requirements\n- Experience with Terraform\nTechnical requirements: Python and Kubernetes\n';
+  assert.deepEqual(extractJdSkills(jd).sort(), EXPECTED);
+});
+
+test('prose after a requirement-heading colon is not read as skills', () => {
+  assert.deepEqual(extractJdSkills('About you: Curious and kind\n- Go\n'), ['Go']);
+});
