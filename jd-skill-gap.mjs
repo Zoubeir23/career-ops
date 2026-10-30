@@ -356,7 +356,13 @@ function scanJd(jdText) {
       // The full-width colon and the CJK separators (、，；) count the same as
       // their ASCII forms: "任职要求：Python、Docker".
       const colon = headerLine.search(/[:：]/);
-      const inline = colon === -1 ? '' : headerLine.slice(colon + 1);
+      let inline = colon === -1 ? '' : headerLine.slice(colon + 1);
+      // A qualified heading may carry its list in parentheses instead:
+      // "Basic Qualifications (Python and Kubernetes)", full-width included.
+      if (!inline && QUALIFIED_REQUIREMENT_HEADER_RE.test(headerLine)) {
+        const paren = headerLine.search(/[(（]/);
+        if (paren !== -1) inline = headerLine.slice(paren + 1);
+      }
       // A qualified heading with no separator ("Technical requirements:
       // Python and Kubernetes") was a requirement line before #6255 made it a
       // heading, so its known skills are kept — vocabulary names only. Every

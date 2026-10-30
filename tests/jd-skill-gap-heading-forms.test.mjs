@@ -133,3 +133,14 @@ test('a colon requirement line without separators keeps its known skills', () =>
 test('prose after a requirement-heading colon is not read as skills', () => {
   assert.deepEqual(extractJdSkills('About you: Curious and kind\n- Go\n'), ['Go']);
 });
+
+// A qualified heading may carry its list in parentheses, ASCII or full-width.
+test('skills in parentheses after a qualified heading are kept', () => {
+  assert.deepEqual(extractJdSkills('Basic Qualifications (Python, Kubernetes and Terraform)\n').sort(), EXPECTED);
+  assert.deepEqual(extractJdSkills('Basic Qualifications（Python、Kubernetes、Terraform）\n').sort(), EXPECTED);
+  assert.deepEqual(extractJdSkills('## Requirements\n- Experience with Terraform\nBasic Qualifications (Python and Kubernetes)\n').sort(), EXPECTED);
+});
+
+test('a parenthesised note after a qualified heading adds no skills', () => {
+  assert.deepEqual(extractJdSkills('Minimum Qualifications (all required)\n- Go\n'), ['Go']);
+});
