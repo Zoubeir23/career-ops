@@ -127,7 +127,8 @@ const USAGE = `Usage:
   node clean-markers.mjs clean <file...>            # strip markers, then report
   node clean-markers.mjs clean --ascii <file...>    # also force plain-ASCII punctuation
   node clean-markers.mjs audit --keep-script-joiners <file...>
-                                                    # keep single joiners emoji, Persian and Indic text need (audit or clean)
+  node clean-markers.mjs clean --keep-script-joiners <file...>
+                                                    # keep single joiners emoji, Persian and Indic text need
   node clean-markers.mjs audit -- -draft.md         # -- ends the flags, for a path starting with a dash
   node clean-markers.mjs --help                     # print this usage block and exit`;
 

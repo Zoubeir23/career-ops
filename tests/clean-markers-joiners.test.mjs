@@ -109,7 +109,8 @@ test('the kept count covers every kept joiner in a file', () => {
 test('--keep-script-joiners is a known flag', () => {
   const r = run('--help');
   assert.equal(r.status, 0, describeSpawn(r, '--help exited non-zero'));
-  assert.match(r.all, /--keep-script-joiners/, '--help does not list the flag');
+  assert.match(r.all, /audit --keep-script-joiners/, '--help does not show the flag with audit');
+  assert.match(r.all, /clean --keep-script-joiners/, '--help does not show the flag with clean');
 });
 
 test('with the flag on, every line names the kept count, zero included', () => {
