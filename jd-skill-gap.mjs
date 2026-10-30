@@ -72,9 +72,10 @@ const QUALIFIED_REQUIREMENT_ARMS = [
   // ("## Basic Qualifications ##", "【Basic Qualifications】") still end it.
   '(?:(?:basic|minimum|key|core|job|role|position|technical|essential|desired|desirable|additional|mandatory|general|specific|candidate|professional|education(?:al)?)\\s+){1,2}(?:requirement|qualification)(?=s?[\\s#\u3011]*(?:[:\uFF1A(\uFF08]|$))',
   // US public-sector postings title the block "Knowledge, Skills, and
-  // Abilities" (KSAs) or "Experience, Skills, and Abilities" (#6255).
+  // Abilities" (KSAs), "Experience, Skills, and Abilities", or both joined
+  // by a slash: "Knowledge/Experience, Skills, and Abilities" (#6255).
   // Same end-of-heading lookahead, for the same prose-line reason.
-  '(?:(?:knowledge|experience|education),?\\s+)?skills,?\\s+(?:and|&)\\s+abilit(?:y|ies)(?=[\\s#\u3011]*(?:[:\uFF1A(\uFF08]|$))',
+  '(?:(?:knowledge|experience|education)(?:\\s*\\/\\s*(?:knowledge|experience|education))?,?\\s+)?skills,?\\s+(?:and|&)\\s+abilit(?:y|ies)(?=[\\s#\u3011]*(?:[:\uFF1A(\uFF08]|$))',
 ];
 const QUALIFIED_REQUIREMENT_HEADER_RE = new RegExp(
   '^#{0,6}\\s*\u3010?\\s*(?:' + QUALIFIED_REQUIREMENT_ARMS.join('|') + ')',

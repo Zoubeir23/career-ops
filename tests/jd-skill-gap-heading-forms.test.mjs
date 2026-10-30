@@ -88,6 +88,7 @@ for (const heading of [
   'Basic Qualifications', 'Minimum Qualifications', 'Role Qualifications',
   'Key Requirements', 'Job Requirements', '## Minimum Qualifications:', '**Basic Qualifications**',
   'Knowledge, Skills, and Abilities', 'Experience, Skills, and Abilities', 'Knowledge, Skills & Abilities',
+  'Knowledge/Experience, Skills, and Abilities', 'Knowledge / Experience, Skills and Abilities',
 ]) {
   test(`a qualified requirements heading is recognized: "${heading}"`, () => {
     assertExtracts(`${heading}${BULLETS}`, heading);
